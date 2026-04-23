@@ -44,6 +44,8 @@ namespace EnvDataCollector.Forms.Panels
             // ── 表单（4列） ─────────────────────────────────
             _txtCode    = UIHelper.MakeTextBox("设备唯一编码");
             _txtName    = UIHelper.MakeTextBox("设备名称");
+            _txtCode.MaxLength = 20;   // 平台接口字段长度上限
+            _txtName.MaxLength = 20;
             _cmbType    = UIHelper.MakeCombo("洗车机", "雾炮", "干雾除尘");
             _cmbSrv     = UIHelper.MakeCombo();
             _chkEnabled = UIHelper.MakeCheck("启用此设备", true);
@@ -88,7 +90,10 @@ namespace EnvDataCollector.Forms.Panels
                     { _cmbSrv.SelectedIndex = i; break; }
             _chkEnabled.Checked = _editEnabled = d.Enabled == 1;
             SyncToggleBtn(_btnToggle, _editEnabled);
-            SetInfo(_lblResult, "");
+            if (d.ServerId > 0 && _cmbSrv.SelectedIndex < 0)
+                SetError(_lblResult, $"⚠ 原绑定的 OPC UA Server #{d.ServerId} 已不存在，请重新选择");
+            else
+                SetInfo(_lblResult, "");
         }
 
         private void NewRecord()
@@ -97,40 +102,91 @@ namespace EnvDataCollector.Forms.Panels
             _txtCode.Text = _txtName.Text = "";
             _cmbType.SelectedIndex = 0;
             if (_cmbSrv.Items.Count > 0) _cmbSrv.SelectedIndex = 0;
+            else                          _cmbSrv.SelectedIndex = -1;
             _chkEnabled.Checked = _editEnabled = true;
             SyncToggleBtn(_btnToggle, _editEnabled);
-            SetInfo(_lblResult, "");
             _grid.ClearSelection();
+            if (_cmbSrv.Items.Count == 0)
+                SetError(_lblResult, "⚠ 尚无 OPC UA Server，请先到「OPC UA 数据源」页面添加");
+            else
+                SetInfo(_lblResult, "");
             _txtCode.Focus();
         }
 
         private void Save()
         {
-            if (string.IsNullOrEmpty(_txtCode.Text.Trim())) { Tip("设备编码不能为空"); return; }
-            if (_cmbSrv.SelectedItem is not UIHelper.Item srv) { Tip("请选择 OPC UA 服务器"); return; }
-            var e = new DeviceEntity
+            string code = _txtCode.Text.Trim();
+            string name = _txtName.Text.Trim();
+            string type = _cmbType.SelectedItem?.ToString();
+
+            if (string.IsNullOrEmpty(type))                      { Tip("请选择设备类型");      return; }
+            if (string.IsNullOrEmpty(code))                      { Tip("设备编码不能为空");    return; }
+            if (string.IsNullOrEmpty(name))                      { Tip("设备名称不能为空");    return; }
+            if (code.Length > 20)                                { Tip("设备编码长度不能超过 20"); return; }
+            if (name.Length > 20)                                { Tip("设备名称长度不能超过 20"); return; }
+            if (_cmbSrv.SelectedItem is not UIHelper.Item srv)   { Tip("请选择 OPC UA 服务器"); return; }
+
+            // 唯一性预检：避免触发 SQLite UNIQUE 约束异常导致界面崩溃
+            var dup = _repo.GetByCode(code);
+            if (dup != null && dup.Id != _editId)
+            {
+                Tip($"设备编码「{code}」已被设备「{dup.DeviceName}」(ID={dup.Id}) 占用");
+                return;
+            }
+
+            var entity = new DeviceEntity
             {
                 Id         = _editId > 0 ? _editId : 0,
-                DeviceType = _cmbType.SelectedItem?.ToString(),
-                DeviceCode = _txtCode.Text.Trim(),
-                DeviceName = _txtName.Text.Trim(),
+                DeviceType = type,
+                DeviceCode = code,
+                DeviceName = name,
                 ServerId   = srv.Id,
                 Enabled    = _chkEnabled.Checked ? 1 : 0
             };
-            if (_editId > 0) _repo.Update(e);
-            else             _editId = _repo.Insert(e);
+
+            try
+            {
+                if (_editId > 0) _repo.Update(entity);
+                else             _editId = _repo.Insert(entity);
+            }
+            catch (Exception ex)
+            {
+                SetError(_lblResult, "❌ 保存失败：" + ex.Message);
+                return;
+            }
+
+            _editEnabled = entity.Enabled == 1;
+            SyncToggleBtn(_btnToggle, _editEnabled);
             RefreshData();
             _grid.SelectRowById(_editId);
-            SetOk(_lblResult, "✅ 保存成功");
+            SetOk(_lblResult, _editEnabled ? "✅ 已保存" : "✅ 已保存（当前为禁用状态）");
         }
 
         private void Delete()
         {
             if (_editId <= 0) { Tip("请先选择一条记录"); return; }
-            if (!Confirm($"确认删除设备「{_txtCode.Text}」？\n相关变量绑定也将一并删除。")) return;
-            _repo.Delete(_editId);
-            _editId = -1; NewRecord(); RefreshData();
-            SetError(_lblResult, "已删除");
+
+            int varCnt = _repo.CountVariables(_editId);
+            int camCnt = _repo.CountCameras(_editId);
+            string extra = (varCnt + camCnt) > 0
+                ? $"\n将同时删除：{varCnt} 条变量绑定、{camCnt} 条摄像头配置。"
+                : "";
+            if (!Confirm($"确认删除设备「{_txtCode.Text}」？{extra}\n（历史运行记录与状态快照会保留作为审计留痕）")) return;
+
+            try
+            {
+                _repo.DeleteCascade(_editId);
+            }
+            catch (Exception ex)
+            {
+                SetError(_lblResult, "❌ 删除失败：" + ex.Message);
+                return;
+            }
+
+            _editId = -1;
+            RefreshData();
+            NewRecord();
+            SetError(_lblResult, "🗑 已删除");
         }
 
         private void ToggleEnabled()

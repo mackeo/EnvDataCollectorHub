@@ -27,6 +27,29 @@ namespace EnvDataCollector.Data.Repositories
             return db.Get<DeviceEntity>(id);
         }
 
+        public DeviceEntity GetByCode(string code)
+        {
+            using IDbConnection db = DbHelper.Open();
+            return db.QueryFirstOrDefault<DeviceEntity>(
+                "SELECT * FROM device WHERE device_code=@code", new { code });
+        }
+
+        public int CountVariables(int deviceId)
+        {
+            using IDbConnection db = DbHelper.Open();
+            return db.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM device_variable WHERE device_id=@deviceId",
+                new { deviceId });
+        }
+
+        public int CountCameras(int deviceId)
+        {
+            using IDbConnection db = DbHelper.Open();
+            return db.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM camera_config WHERE device_id=@deviceId",
+                new { deviceId });
+        }
+
         public int Insert(DeviceEntity e)
         {
             e.CreatedAt = e.UpdatedAt = Now;
@@ -55,6 +78,18 @@ namespace EnvDataCollector.Data.Repositories
         {
             using IDbConnection db = DbHelper.Open();
             db.Delete(new DeviceEntity { Id = id });
+        }
+
+        // 级联删除：device + device_variable + camera_config（同事务，保证一致性）
+        // 不删 run_record / device_snapshot / plate_event 等历史数据，避免破坏审计留痕
+        public void DeleteCascade(int id)
+        {
+            using IDbConnection db = DbHelper.Open();
+            using IDbTransaction tx = db.BeginTransaction();
+            db.Execute("DELETE FROM device_variable WHERE device_id=@id", new { id }, tx);
+            db.Execute("DELETE FROM camera_config   WHERE device_id=@id", new { id }, tx);
+            db.Execute("DELETE FROM device          WHERE id=@id",        new { id }, tx);
+            tx.Commit();
         }
     }
 }
