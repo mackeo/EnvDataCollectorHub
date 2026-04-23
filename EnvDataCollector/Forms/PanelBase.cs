@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -7,6 +8,7 @@ namespace EnvDataCollector.Forms
     /// 所有功能 Panel 的基类。
     /// 统一提供：结果标签辅助、对话框快捷方式、启用/禁用切换按钮管理。
     /// </summary>
+    [DesignerCategory("Code")]   // 强制以代码视图打开，避免 VS Designer 试图实例化抽象基类
     public abstract class PanelBase : UserControl, IRefreshable
     {
         protected PanelBase() { Dock = DockStyle.Fill; }
