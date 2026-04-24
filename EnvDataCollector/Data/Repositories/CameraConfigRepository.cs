@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using Dapper;
 using Dapper.Contrib.Extensions;
@@ -10,11 +11,33 @@ namespace EnvDataCollector.Data.Repositories
     {
         private static string Now => DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
+        public IEnumerable<CameraConfigEntity> GetAll(bool enabledOnly = false)
+        {
+            using IDbConnection db = DbHelper.Open();
+            return enabledOnly
+                ? db.Query<CameraConfigEntity>(
+                    "SELECT * FROM camera_config WHERE enabled=1 ORDER BY id")
+                : db.Query<CameraConfigEntity>(
+                    "SELECT * FROM camera_config ORDER BY id");
+        }
+
+        public CameraConfigEntity GetById(int id)
+        {
+            using IDbConnection db = DbHelper.Open();
+            return db.Get<CameraConfigEntity>(id);
+        }
+
         public CameraConfigEntity GetByDevice(int deviceId)
         {
             using IDbConnection db = DbHelper.Open();
             return db.QueryFirstOrDefault<CameraConfigEntity>(
                 "SELECT * FROM camera_config WHERE device_id=@deviceId", new { deviceId });
+        }
+
+        public void Delete(int id)
+        {
+            using IDbConnection db = DbHelper.Open();
+            db.Execute("DELETE FROM camera_config WHERE id=@id", new { id });
         }
 
         // Upsert（ON CONFLICT）：无 Contrib 等效，保留显式 SQL

@@ -2,6 +2,7 @@ using System;
 using System.Windows.Forms;
 using EnvDataCollector.Data;
 using EnvDataCollector.Forms;
+using EnvDataCollector.Services.Hk;
 using NLog;
 
 namespace EnvDataCollector
@@ -22,6 +23,7 @@ namespace EnvDataCollector
             try
             {
                 DatabaseInitializer.Initialize();
+                HikSdkBootstrap.Startup();
                 Log.Info("=== 原料大棚洗车与除尘数据采集程序启动 ===");
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
@@ -33,7 +35,11 @@ namespace EnvDataCollector
                 MessageBox.Show("启动失败：" + ex.Message, "错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-            finally { LogManager.Shutdown(); }
+            finally
+            {
+                HikSdkBootstrap.Shutdown();
+                LogManager.Shutdown();
+            }
         }
     }
 }
