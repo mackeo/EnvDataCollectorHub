@@ -34,8 +34,7 @@ namespace EnvDataCollector.Services.Hk
         private CHCNetSDK.MSGCallBack_V31 _callback;
 
         // 事件处理用后台 worker：回调里只 marshal + 拷贝字节，把耗时工作丢到队列
-        private readonly BlockingCollection<PlateWorkItem> _queue = new();
-        private CancellationTokenSource _cts;
+        private BlockingCollection<PlateWorkItem> _queue;
         private Task _worker;
 
         public bool Running { get; private set; }
@@ -55,8 +54,8 @@ namespace EnvDataCollector.Services.Hk
                 Log.Warn("NET_DVR_SetDVRMessageCallBack_V31 失败，错误码 {0}",
                     CHCNetSDK.NET_DVR_GetLastError());
 
-            _cts    = new CancellationTokenSource();
-            _worker = Task.Run(() => WorkerLoop(_cts.Token));
+            _queue  = new BlockingCollection<PlateWorkItem>();
+            _worker = Task.Run((Action)WorkerLoop);
 
             foreach (var cfg in _camRepo.GetAll(enabledOnly: true))
                 TryOpen(cfg);
@@ -78,9 +77,10 @@ namespace EnvDataCollector.Services.Hk
             }
             _sessions.Clear();
 
-            try { _cts?.Cancel(); _queue.CompleteAdding(); } catch { }
-            try { _worker?.Wait(500); } catch { }
-            _cts = null; _worker = null;
+            try { _queue?.CompleteAdding(); } catch { }
+            try { _worker?.Wait(500); }       catch { }
+            _queue  = null;
+            _worker = null;
 
             _callback = null;   // 解除回调引用，配合下一轮 Start 重新赋值
             Running = false;
@@ -90,8 +90,6 @@ namespace EnvDataCollector.Services.Hk
         public void Reload()
         {
             Stop();
-            // 重新创建队列（原队列 CompleteAdding 后不可再用）
-            while (_queue.TryTake(out _)) { }
             Start();
         }
 
@@ -198,15 +196,23 @@ namespace EnvDataCollector.Services.Hk
                     }
                 }
 
-                _queue.Add(new PlateWorkItem
+                var q = _queue;
+                if (q != null && !q.IsAddingCompleted)
                 {
-                    DeviceId   = sess.DeviceId,
-                    DeviceCode = sess.DeviceCode,
-                    Config     = sess.Config,
-                    Plate      = plate,
-                    Pictures   = pics,
-                    ReceivedAt = DateTime.Now
-                });
+                    try
+                    {
+                        q.Add(new PlateWorkItem
+                        {
+                            DeviceId   = sess.DeviceId,
+                            DeviceCode = sess.DeviceCode,
+                            Config     = sess.Config,
+                            Plate      = plate,
+                            Pictures   = pics,
+                            ReceivedAt = DateTime.Now
+                        });
+                    }
+                    catch (InvalidOperationException) { /* Stop 与回调竞争，丢弃本次事件 */ }
+                }
             }
             catch (Exception ex)
             {
@@ -219,9 +225,12 @@ namespace EnvDataCollector.Services.Hk
         // 后台 worker：写磁盘 + 写数据库
         // ═══════════════════════════════════════════════════════════
 
-        private void WorkerLoop(CancellationToken ct)
+        private void WorkerLoop()
         {
-            foreach (var item in _queue.GetConsumingEnumerable(ct))
+            var q = _queue;
+            if (q == null) return;
+            // CompleteAdding 后 GetConsumingEnumerable 自然结束，无需 CancellationToken
+            foreach (var item in q.GetConsumingEnumerable())
             {
                 try { ProcessItem(item); }
                 catch (Exception ex) { Log.Error(ex, "ProcessItem 异常"); }
