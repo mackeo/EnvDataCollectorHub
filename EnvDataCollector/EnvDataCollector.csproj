@@ -212,6 +212,8 @@
     <Compile Include="Services\Hk\CHCNetSDK.cs" />
     <Compile Include="Services\Hk\PlayCtrl.cs" />
     <Compile Include="Services\Hk\HikSdkBootstrap.cs" />
+    <Compile Include="Services\Hk\CameraService.cs" />
+    <Compile Include="Services\ImageHttpServer.cs" />
     <Compile Include="Forms\UIHelper.cs" />
     <Compile Include="Forms\MainForm.cs">
       <SubType>Form</SubType>

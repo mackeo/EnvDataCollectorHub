@@ -16,8 +16,9 @@ namespace EnvDataCollector.Forms.Panels
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
 
-        private readonly CameraConfigRepository _repo    = new();
-        private readonly DeviceRepository       _devRepo = new();
+        private readonly MainForm                _main;
+        private readonly CameraConfigRepository  _repo    = new();
+        private readonly DeviceRepository        _devRepo = new();
 
         private ComboBox      _cmbDevice;
         private TextBox       _txtIp, _txtUser, _txtPwd, _txtPath, _txtUrl;
@@ -31,26 +32,30 @@ namespace EnvDataCollector.Forms.Panels
         private bool _editEnabled = true;
         private bool _refreshing;
 
-        public CameraConfigPanel(MainForm main) { BuildUI(); }
+        public CameraConfigPanel(MainForm main) { _main = main; BuildUI(); }
 
         private void BuildUI()
         {
             // ── 工具栏 ──────────────────────────────────────
             _lblResult = UIHelper.ResultLabel();
-            var btnNew  = UIHelper.MakeBtn("➕ 新建", UIHelper.C.Dark);
-            var btnSave = UIHelper.MakeBtn("💾 保存", UIHelper.C.Primary);
-            var btnDel  = UIHelper.MakeBtn("🗑 删除", UIHelper.C.Danger);
-            _btnToggle  = UIHelper.MakeBtn("⏸ 禁用", UIHelper.C.Warning);
-            var btnTest = UIHelper.MakeBtn("📷 测试凭证", UIHelper.C.Success);
+            var btnNew   = UIHelper.MakeBtn("➕ 新建", UIHelper.C.Dark);
+            var btnSave  = UIHelper.MakeBtn("💾 保存", UIHelper.C.Primary);
+            var btnDel   = UIHelper.MakeBtn("🗑 删除", UIHelper.C.Danger);
+            _btnToggle   = UIHelper.MakeBtn("⏸ 禁用", UIHelper.C.Warning);
+            var btnTest  = UIHelper.MakeBtn("📷 测试凭证", UIHelper.C.Success);
+            var btnStart = UIHelper.MakeBtn("▶ 启动采集", UIHelper.C.Success);
+            var btnStop  = UIHelper.MakeBtn("⏹ 停止采集", UIHelper.C.Danger);
 
             btnNew.Click     += (s, e) => NewRecord();
             btnSave.Click    += (s, e) => Save();
             btnDel.Click     += (s, e) => Delete();
             _btnToggle.Click += (s, e) => ToggleEnabled();
             btnTest.Click    += (s, e) => TestCredential(btnTest);
+            btnStart.Click   += (s, e) => StartCapture();
+            btnStop.Click    += (s, e) => StopCapture();
 
             var toolbar = UIHelper.MakeToolbar(
-                btnNew, btnSave, btnDel, _btnToggle, btnTest, _lblResult);
+                btnNew, btnSave, btnDel, _btnToggle, btnTest, btnStart, btnStop, _lblResult);
 
             // ── 表单（4列） ─────────────────────────────────
             _cmbDevice = UIHelper.MakeCombo();
@@ -218,6 +223,7 @@ namespace EnvDataCollector.Forms.Panels
             // Upsert 不返回 Id；按 device_id 找回当前行并选中
             var saved = _repo.GetByDevice(dev.Id);
             if (saved != null) { _editId = saved.Id; _grid.SelectRowById(_editId); }
+            ReloadCaptureIfRunning();
             SetOk(_lblResult, _editEnabled ? "✅ 已保存" : "✅ 已保存（当前为禁用状态）");
         }
 
@@ -239,6 +245,7 @@ namespace EnvDataCollector.Forms.Panels
             _editId = -1;
             RefreshData();
             NewRecord();
+            ReloadCaptureIfRunning();
             SetError(_lblResult, "🗑 已删除");
         }
 
@@ -255,6 +262,52 @@ namespace EnvDataCollector.Forms.Panels
                 _editEnabled ? UIHelper.C.Success : Color.OrangeRed);
             RefreshData();
             _grid.SelectRowById(_editId);
+            ReloadCaptureIfRunning();
+        }
+
+        // ══════════════════════════════════════════════════════
+        // 启停采集
+        // ══════════════════════════════════════════════════════
+
+        private void StartCapture()
+        {
+            if (_main?.Cam == null) { Tip("CameraService 未初始化"); return; }
+            if (!HikSdkBootstrap.IsInitialized) { Tip("海康 SDK 未初始化"); return; }
+            try
+            {
+                _main.Cam.Reload();   // 包含 Stop + 重新读配置 + Start
+                SetOk(_lblResult, $"✅ 采集已启动，会话数 {_main.Cam.ActiveCount}");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "StartCapture 失败");
+                SetError(_lblResult, "❌ 启动采集失败：" + ex.Message);
+            }
+        }
+
+        private void StopCapture()
+        {
+            if (_main?.Cam == null) { Tip("CameraService 未初始化"); return; }
+            try
+            {
+                _main.Cam.Stop();
+                SetError(_lblResult, "⏹ 采集已停止");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "StopCapture 失败");
+                SetError(_lblResult, "❌ 停止采集失败：" + ex.Message);
+            }
+        }
+
+        /// <summary>若采集正在运行，触发热重载以应用新配置</summary>
+        private void ReloadCaptureIfRunning()
+        {
+            if (_main?.Cam != null && _main.Cam.Running)
+            {
+                try { _main.Cam.Reload(); }
+                catch (Exception ex) { Log.Warn(ex, "采集热重载失败"); }
+            }
         }
 
         // ══════════════════════════════════════════════════════

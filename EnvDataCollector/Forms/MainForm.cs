@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using EnvDataCollector.Forms.Panels;
 using EnvDataCollector.Services;
+using EnvDataCollector.Services.Hk;
 using NLog;
 
 namespace EnvDataCollector.Forms
@@ -12,8 +13,10 @@ namespace EnvDataCollector.Forms
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
 
-        // ── 仅保留 OPC UA 服务 ──────────────────────────────
-        public readonly OpcUaService Opc = new();
+        // ── 长期运行的服务 ────────────────────────────────────
+        public readonly OpcUaService    Opc       = new();
+        public readonly CameraService   Cam       = new();
+        public readonly ImageHttpServer ImageHttp = new();
 
         private readonly Dictionary<string, UserControl> _panels = new();
         private UserControl _current;
@@ -30,6 +33,8 @@ namespace EnvDataCollector.Forms
                 Log.Info($"[OpcUA] Server {srvId} {(connected ? "已连接" : "已断开")}");
             };
             Opc.Start();
+            ImageHttp.Start();
+            Cam.Start();
 
             InitPanels();
             _navTree.AfterSelect += (s, e) => Navigate(e.Node?.Name);
@@ -79,8 +84,15 @@ namespace EnvDataCollector.Forms
                 int disc = Opc.DisconnectedCount();
                 _lblOpc.Text      = disc > 0 ? $"OpcUA ⚠{disc}" : "OpcUA ✓";
                 _lblOpc.ForeColor = disc > 0 ? Color.OrangeRed : Color.DarkGreen;
-                _lblCam.Text      = "摄像头 -";
-                _lblCam.ForeColor = Color.Gray;
+
+                int camActive = Cam.ActiveCount;
+                _lblCam.Text = Cam.Running
+                    ? (camActive > 0 ? $"摄像头 ✓{camActive}" : "摄像头 ⚠0")
+                    : "摄像头 ⏹";
+                _lblCam.ForeColor = Cam.Running && camActive > 0
+                    ? Color.DarkGreen
+                    : (Cam.Running ? Color.OrangeRed : Color.Gray);
+
                 _lblPush.Text     = "推送 -";
                 _lblPush.ForeColor= Color.Gray;
                 _lblPending.Text  = "积压 -";
@@ -91,7 +103,9 @@ namespace EnvDataCollector.Forms
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             _statusTimer.Stop();
-            try { Opc?.Dispose(); } catch { }
+            try { Cam?.Stop();       } catch { }
+            try { ImageHttp?.Stop(); } catch { }
+            try { Opc?.Dispose();    } catch { }
             base.OnFormClosing(e);
         }
     }
