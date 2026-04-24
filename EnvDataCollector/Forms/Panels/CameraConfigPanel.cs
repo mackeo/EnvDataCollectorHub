@@ -93,7 +93,9 @@ namespace EnvDataCollector.Forms.Panels
                 UIHelper.Col("Win",  "匹配窗(前/后)",100),
                 UIHelper.Col("Path", "图片路径",     0, true),
                 UIHelper.Col("Ena",  "状态",         60));
-            _grid.SelectionChanged += (s, e) => { if (!_refreshing) LoadRow(); };
+            _grid.SelectionChanged += (s, e) => { if (!_refreshing) LoadRowFromCurrent(); };
+            _grid.RowEnter         += (s, e) => { if (!_refreshing) LoadRowFromIndex(e.RowIndex); };
+            _grid.CellClick        += (s, e) => { if (!_refreshing) LoadRowFromIndex(e.RowIndex); };
 
             Controls.Add(_grid);
             Controls.Add(UIHelper.MakeSeparator());
@@ -117,10 +119,17 @@ namespace EnvDataCollector.Forms.Panels
         // 选中/新建/保存/删除/启停
         // ══════════════════════════════════════════════════════
 
-        private void LoadRow()
+        private void LoadRowFromCurrent()
         {
-            if (_grid.SelectedRows.Count == 0) return;
-            if (!int.TryParse(_grid.SelectedRows[0].Cells["Id"].Value?.ToString(), out int id)) return;
+            int idx = _grid.CurrentRow?.Index ?? -1;
+            if (idx < 0 && _grid.SelectedRows.Count > 0) idx = _grid.SelectedRows[0].Index;
+            LoadRowFromIndex(idx);
+        }
+
+        private void LoadRowFromIndex(int rowIndex)
+        {
+            if (rowIndex < 0 || rowIndex >= _grid.Rows.Count) return;
+            if (!int.TryParse(_grid.Rows[rowIndex].Cells["Id"].Value?.ToString(), out int id)) return;
             var c = _repo.GetById(id); if (c == null) return;
             _editId = id;
 
