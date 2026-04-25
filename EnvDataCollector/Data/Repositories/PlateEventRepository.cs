@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
+using System.Text;
 using Dapper;
 using Dapper.Contrib.Extensions;
 using EnvDataCollector.Models;
@@ -28,6 +30,42 @@ namespace EnvDataCollector.Data.Repositories
         {
             using IDbConnection db = DbHelper.Open();
             return db.Get<PlateEventEntity>(id);
+        }
+
+        /// <summary>分页查询：按时间范围 + 可选设备 + 可选车牌模糊匹配</summary>
+        public IEnumerable<PlateEventEntity> Query(
+            DateTime from, DateTime to,
+            int? deviceId, string plateLike,
+            int limit = 500)
+        {
+            var sb = new StringBuilder(@"
+                SELECT * FROM plate_event
+                WHERE event_time BETWEEN @from AND @to");
+            var p = new DynamicParameters();
+            p.Add("from",  from.ToString("yyyy-MM-dd HH:mm:ss"));
+            p.Add("to",    to.ToString("yyyy-MM-dd HH:mm:ss"));
+            p.Add("limit", limit);
+
+            if (deviceId.HasValue)
+            {
+                sb.Append(" AND device_id=@deviceId");
+                p.Add("deviceId", deviceId.Value);
+            }
+            if (!string.IsNullOrEmpty(plateLike))
+            {
+                sb.Append(" AND plate_no LIKE @plate");
+                p.Add("plate", "%" + plateLike + "%");
+            }
+            sb.Append(" ORDER BY id DESC LIMIT @limit");
+
+            using IDbConnection db = DbHelper.Open();
+            return db.Query<PlateEventEntity>(sb.ToString(), p);
+        }
+
+        public void Delete(long id)
+        {
+            using IDbConnection db = DbHelper.Open();
+            db.Execute("DELETE FROM plate_event WHERE id=@id", new { id });
         }
 
         /// <summary>时间窗内按置信度最高、时间最近匹配</summary>

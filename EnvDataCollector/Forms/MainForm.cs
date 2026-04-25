@@ -53,6 +53,7 @@ namespace EnvDataCollector.Forms
             _panels["DeviceManage"] = new DeviceManagePanel(this);
             _panels["VarBrowser"]   = new VariableBrowserPanel(this);
             _panels["CameraConfig"] = new CameraConfigPanel(this);
+            _panels["PlateEvent"]   = new PlateEventPanel(this);
             _panels["PlatformApi"]  = new PlatformApiPanel(this);
             _panels["Outbox"]       = new OutboxPanel(this);
             _panels["RunRecord"]    = new RunRecordPanel(this);

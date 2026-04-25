@@ -124,6 +124,7 @@ namespace EnvDataCollector.Forms
             Add("CameraConfig", " 摄像头与车牌", "Config");
             Add("PlatformApi", " 平台接口/鉴权", "Config");
             Add("Data", "📋 数据管理");
+            Add("PlateEvent", " 车牌事件浏览", "Data");
             Add("Outbox", " 推送队列补传", "Data");
             Add("RunRecord", " 运行记录查询", "Data");
             Add("Cleanup", " 数据清理维护", "Data");

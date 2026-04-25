@@ -234,6 +234,9 @@
     <Compile Include="Forms\Panels\CameraConfigPanel.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="Forms\Panels\PlateEventPanel.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="Forms\Panels\PlatformApiPanel.cs">
       <SubType>UserControl</SubType>
     </Compile>
