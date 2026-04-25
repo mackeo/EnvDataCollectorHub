@@ -18,6 +18,7 @@ namespace EnvDataCollector.Forms
         public readonly CameraService    Cam        = new();
         public readonly ImageHttpServer  ImageHttp  = new();
         public readonly RunRecordBuilder RunBuilder = new();
+        public readonly SnapshotWriter   SnapWriter = new();
 
         private readonly Dictionary<string, UserControl> _panels = new();
         private UserControl _current;
@@ -34,6 +35,7 @@ namespace EnvDataCollector.Forms
                 Log.Info($"[OpcUA] Server {srvId} {(connected ? "已连接" : "已断开")}");
             };
             Opc.Start();
+            SnapWriter.Start(Opc);
             ImageHttp.Start();
             Cam.Start();
             RunBuilder.Start();
@@ -109,6 +111,7 @@ namespace EnvDataCollector.Forms
             try { RunBuilder?.Stop(); } catch { }
             try { Cam?.Stop();        } catch { }
             try { ImageHttp?.Stop();  } catch { }
+            try { SnapWriter?.Stop(); } catch { }
             try { Opc?.Dispose();     } catch { }
             base.OnFormClosing(e);
         }

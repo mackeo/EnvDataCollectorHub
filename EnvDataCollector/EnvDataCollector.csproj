@@ -215,6 +215,7 @@
     <Compile Include="Services\Hk\CameraService.cs" />
     <Compile Include="Services\ImageHttpServer.cs" />
     <Compile Include="Services\RunRecordBuilder.cs" />
+    <Compile Include="Services\SnapshotWriter.cs" />
     <Compile Include="Forms\UIHelper.cs" />
     <Compile Include="Forms\MainForm.cs">
       <SubType>Form</SubType>
