@@ -34,6 +34,9 @@ namespace EnvDataCollector.Forms.Panels
         // 当前列表对应的实体（按 grid 行序），点击行时拿来加载预览
         private List<PlateEventEntity> _items = new();
 
+        // SplitContainer 一次性应用 SplitterDistance 的 flag；之后任由用户拖动
+        private bool _splitInited;
+
         public PlateEventPanel(MainForm main) { BuildUI(); }
 
         // ══════════════════════════════════════════════════════
@@ -65,15 +68,18 @@ namespace EnvDataCollector.Forms.Panels
                 _txtPlate, btnQuery, btnToday, btnRecent, btnDel, _lblResult);
 
             // 主体：左 grid + 右图片预览
+            // SplitterDistance / Panel2MinSize 不能在 new 时设：此刻 Width 是默认值（约 150），
+            // 任何 >= Width 的 SplitterDistance 都会抛 ArgumentException → 启动失败。
+            // 改成挂 HandleCreated + Resize 一次性应用（用 _splitInited flag 防覆盖用户拖动）。
             var split = new SplitContainer
             {
                 Dock = DockStyle.Fill,
                 Orientation = Orientation.Vertical,
-                SplitterDistance = 760,
                 FixedPanel = FixedPanel.Panel2,
-                Panel2MinSize = 320,
                 BackColor = UIHelper.C.Surface
             };
+            split.HandleCreated += (s, e) => ApplySplitLayout(split);
+            split.Resize        += (s, e) => ApplySplitLayout(split);
 
             // 左：列表
             _grid = UIHelper.MakeGrid();
@@ -148,6 +154,37 @@ namespace EnvDataCollector.Forms.Panels
         // ══════════════════════════════════════════════════════
         // 数据加载
         // ══════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 第一次有合理 Width 时设置 SplitterDistance / Panel2MinSize。
+        /// HandleCreated 是 native handle 出现的时机；Resize 是兜底（保证 LayoutEngine
+        /// 至少给过一次合理 Width）。设成功后 _splitInited 置 true，让用户拖动生效。
+        /// </summary>
+        private void ApplySplitLayout(SplitContainer split)
+        {
+            if (_splitInited)        return;
+            if (split.Width < 600)   return;   // 主窗未铺开前不动
+
+            int panel2Min = 200;
+            int rightWanted = 360;
+            int dist = Math.Max(panel2Min, split.Width - rightWanted);
+
+            // 数学保证：dist ∈ [panel2Min, Width - panel2Min]，但保险起见再夹一次
+            int max = split.Width - panel2Min;
+            if (max < panel2Min) return;       // Width 太小，留给下次 Resize
+            if (dist > max) dist = max;
+
+            try
+            {
+                split.Panel2MinSize    = panel2Min;
+                split.SplitterDistance = dist;
+                _splitInited = true;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "ApplySplitLayout 失败（Width={0}，dist={1}）", split.Width, dist);
+            }
+        }
 
         public override void RefreshData()
         {
