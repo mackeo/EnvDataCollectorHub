@@ -132,11 +132,13 @@ namespace EnvDataCollector.Services.Hk
 
             var alarmParam = new CHCNetSDK.NET_DVR_SETUPALARM_PARAM
             {
-                dwSize           = (uint)Marshal.SizeOf(typeof(CHCNetSDK.NET_DVR_SETUPALARM_PARAM)),
-                byLevel          = 1,
-                byAlarmInfoType  = 1,   // 使用新结构 NET_ITS_PLATE_RESULT
-                byDeployType     = 1,
-                byRes1           = new byte[2]
+                dwSize                = (uint)Marshal.SizeOf(typeof(CHCNetSDK.NET_DVR_SETUPALARM_PARAM)),
+                byLevel               = 1,
+                byAlarmInfoType       = 1,   // 1 = NET_ITS_PLATE_RESULT 新结构
+                byFaceAlarmDetection  = 1,   // 与官方 demo 对齐；不设部分设备会拒绝布防
+                byRes1                = new byte[2]
+                // byDeployType 保持默认 0（客户端布防）；某些 ITS 卡口不支持实时布防，
+                // 设 1 会返回错误码 28 NET_DVR_DVRNORESOURCE。
             };
             int alarmHandle = CHCNetSDK.NET_DVR_SetupAlarmChan_V41(userId, ref alarmParam);
             if (alarmHandle < 0)
