@@ -14,9 +14,10 @@ namespace EnvDataCollector.Forms
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
 
         // ── 长期运行的服务 ────────────────────────────────────
-        public readonly OpcUaService    Opc       = new();
-        public readonly CameraService   Cam       = new();
-        public readonly ImageHttpServer ImageHttp = new();
+        public readonly OpcUaService     Opc        = new();
+        public readonly CameraService    Cam        = new();
+        public readonly ImageHttpServer  ImageHttp  = new();
+        public readonly RunRecordBuilder RunBuilder = new();
 
         private readonly Dictionary<string, UserControl> _panels = new();
         private UserControl _current;
@@ -35,6 +36,7 @@ namespace EnvDataCollector.Forms
             Opc.Start();
             ImageHttp.Start();
             Cam.Start();
+            RunBuilder.Start();
 
             InitPanels();
             _navTree.AfterSelect += (s, e) => Navigate(e.Node?.Name);
@@ -104,9 +106,10 @@ namespace EnvDataCollector.Forms
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             _statusTimer.Stop();
-            try { Cam?.Stop();       } catch { }
-            try { ImageHttp?.Stop(); } catch { }
-            try { Opc?.Dispose();    } catch { }
+            try { RunBuilder?.Stop(); } catch { }
+            try { Cam?.Stop();        } catch { }
+            try { ImageHttp?.Stop();  } catch { }
+            try { Opc?.Dispose();     } catch { }
             base.OnFormClosing(e);
         }
     }
