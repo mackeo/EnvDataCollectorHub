@@ -23,6 +23,7 @@ namespace EnvDataCollector.Forms
         public readonly TokenService       TokenSvc       = new();
         public readonly PushWorker         Pusher         = new();
         public readonly StatusUploadWorker StatusUploader = new();
+        public readonly CleanupWorker      Cleanup        = new();
 
         private readonly OutboxRepository _outboxRepo = new();
 
@@ -47,6 +48,7 @@ namespace EnvDataCollector.Forms
             RunBuilder.Start();
             Pusher.Start(TokenSvc);
             StatusUploader.Start();
+            Cleanup.Start();
 
             InitPanels();
             _navTree.AfterSelect += (s, e) => Navigate(e.Node?.Name);
@@ -126,6 +128,7 @@ namespace EnvDataCollector.Forms
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             _statusTimer.Stop();
+            try { Cleanup?.Stop();        } catch { }
             try { StatusUploader?.Stop(); } catch { }
             try { Pusher?.Stop();         } catch { }
             try { RunBuilder?.Stop();     } catch { }
