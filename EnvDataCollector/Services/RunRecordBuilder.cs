@@ -35,6 +35,7 @@ namespace EnvDataCollector.Services
         private readonly DeviceRepository         _devRepo   = new();
         private readonly PlateEventRepository     _plateRepo = new();
         private readonly CameraConfigRepository   _camRepo   = new();
+        private readonly OutboxRepository         _outboxRepo = new();
         private readonly AppSettingRepository     _settings  = new();
 
         private readonly object _lock = new();
@@ -282,13 +283,28 @@ namespace EnvDataCollector.Services
             }
             catch (Exception ex) { Log.Warn(ex, "FindBestMatch 异常"); }
 
+            long newId;
             try
             {
-                long id = _runRepo.Insert(rec);
+                newId = _runRepo.Insert(rec);
                 Log.Info("RunRecord 入库 id={0}，{1} 时长 {2}s，车牌 {3}",
-                    id, open.Device.DeviceCode, runSec, rec.VehicleNo ?? "(未匹配)");
+                    newId, open.Device.DeviceCode, runSec, rec.VehicleNo ?? "(未匹配)");
             }
             catch (Exception ex) { Log.Error(ex, "RunRecord Insert 失败"); return false; }
+
+            // 事件上报入队（EventApiUrl 未配则跳过，不 spam）
+            try
+            {
+                string eventUrl = _settings.Get(SK.EventApiUrl);
+                if (!string.IsNullOrWhiteSpace(eventUrl))
+                {
+                    int maxRetry = _settings.Get<int>(SK.MaxRetryCount, 10);
+                    rec.Id = newId;
+                    string json = Newtonsoft.Json.JsonConvert.SerializeObject(rec);
+                    _outboxRepo.Enqueue("event", eventUrl, json, "run_record", newId, maxRetry);
+                }
+            }
+            catch (Exception ex) { Log.Warn(ex, "RunRecord 入队 push_outbox 失败 id={0}", newId); }
             return true;
         }
 

@@ -216,6 +216,9 @@
     <Compile Include="Services\ImageHttpServer.cs" />
     <Compile Include="Services\RunRecordBuilder.cs" />
     <Compile Include="Services\SnapshotWriter.cs" />
+    <Compile Include="Services\TokenService.cs" />
+    <Compile Include="Services\PushWorker.cs" />
+    <Compile Include="Services\StatusUploadWorker.cs" />
     <Compile Include="Forms\UIHelper.cs" />
     <Compile Include="Forms\MainForm.cs">
       <SubType>Form</SubType>
