@@ -1,14 +1,24 @@
+using System;
 using System.Drawing;
 using System.Windows.Forms;
+using EnvDataCollector.Data.Repositories;
+using NLog;
 
 namespace EnvDataCollector.Forms.Panels
 {
     public class ModbusPanel : PanelBase
     {
+        private static readonly Logger Log = LogManager.GetCurrentClassLogger();
+
+        private readonly MainForm _main;
+        private readonly AppSettingRepository _settings = new();
+
         private CheckBox     _chkEnabled;
         private TextBox      _txtIp, _txtPort;
         private ComboBox     _cmbHb;
         private DataGridView _gridCoils, _gridRegs;
+        private Label        _lblResult;
+        private System.Windows.Forms.Timer _refreshTimer;
 
         private static readonly string[] CoilNames = {
             "AppRunning", "HeartbeatBit", "OpcUaAnyDisconnected",
@@ -17,7 +27,14 @@ namespace EnvDataCollector.Forms.Panels
             "HeartbeatCounter", "OpcUaDisconnectedCount", "CameraOfflineCount",
             "PushFailedCount", "PushPendingCount", "PushOldestPendingMin" };
 
-        public ModbusPanel(MainForm main) { BuildUI(); }
+        public ModbusPanel(MainForm main)
+        {
+            _main = main;
+            BuildUI();
+            _refreshTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+            _refreshTimer.Tick += (s, e) => RefreshPreview();
+            _refreshTimer.Start();
+        }
 
         private void BuildUI()
         {
@@ -29,16 +46,17 @@ namespace EnvDataCollector.Forms.Panels
             _txtIp   = UIHelper.MakeTextBox(); _txtIp.Text = "0.0.0.0";
             _txtPort = UIHelper.MakeTextBox(); _txtPort.Text = "1502";
             _cmbHb   = UIHelper.MakeCombo("Counter", "Bit");
+            _lblResult = UIHelper.ResultLabel();
 
             var btnSave = UIHelper.MakeBtn("💾 保存（重启生效）");
-            btnSave.Click += (s, e) => Tip("功能已禁用");
+            btnSave.Click += (s, e) => SaveSettings();
 
             var tbl = UIHelper.MakeFormTable(labelWidth: 100);
             tbl.AddRowSpan(_chkEnabled, height: 32);
             tbl.AddRow("监听 IP",  _txtIp);
             tbl.AddRow("端口",     _txtPort);
             tbl.AddRow("心跳模式", _cmbHb);
-            tbl.AddRowSpan(btnSave, height: 36);
+            tbl.AddBtnRow(btnSave, _lblResult);
 
             var cfgPanel = UIHelper.WrapFormPanel(tbl, height: 200,
                 padding: new Padding(16, 12, 16, 8));
@@ -82,6 +100,58 @@ namespace EnvDataCollector.Forms.Panels
             return p;
         }
 
-        public override void RefreshData() { }
+        public override void RefreshData()
+        {
+            _chkEnabled.Checked = _settings.Get<int>(SK.ModbusEnabled, 0) == 1;
+            _txtIp.Text         = _settings.Get(SK.ModbusListenIp, "0.0.0.0");
+            _txtPort.Text       = _settings.Get(SK.ModbusListenPort, "1502");
+            _cmbHb.SelectedItem = _settings.Get(SK.ModbusHeartbeat, "Counter");
+            RefreshPreview();
+        }
+
+        private void SaveSettings()
+        {
+            if (!int.TryParse(_txtPort.Text, out int port) || port < 1 || port > 65535)
+            { Tip("端口范围 1-65535"); return; }
+            try
+            {
+                _settings.Set(SK.ModbusEnabled,    _chkEnabled.Checked ? 1 : 0);
+                _settings.Set(SK.ModbusListenIp,   _txtIp.Text.Trim());
+                _settings.Set(SK.ModbusListenPort, port);
+                _settings.Set(SK.ModbusHeartbeat,  _cmbHb.SelectedItem?.ToString() ?? "Counter");
+                SetOk(_lblResult, "✅ 已保存（监听变更需重启程序生效）");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Modbus 保存失败");
+                SetError(_lblResult, "❌ 保存失败：" + ex.Message);
+            }
+        }
+
+        private void RefreshPreview()
+        {
+            try
+            {
+                var srv = _main?.Modbus;
+                if (srv == null || !srv.Running)
+                {
+                    SetCellsTo(_gridCoils, "-");
+                    SetCellsTo(_gridRegs,  "-");
+                    return;
+                }
+                var (coils, regs) = srv.Snapshot();
+                for (int i = 0; i < coils.Length && i < _gridCoils.Rows.Count; i++)
+                    _gridCoils.Rows[i].Cells["Value"].Value = coils[i] ? "1" : "0";
+                for (int i = 0; i < regs.Length && i < _gridRegs.Rows.Count; i++)
+                    _gridRegs.Rows[i].Cells["Value"].Value = regs[i].ToString();
+            }
+            catch (Exception ex) { Log.Debug(ex, "Modbus 预览刷新异常"); }
+        }
+
+        private static void SetCellsTo(DataGridView g, string v)
+        {
+            foreach (DataGridViewRow row in g.Rows)
+                row.Cells["Value"].Value = v;
+        }
     }
 }

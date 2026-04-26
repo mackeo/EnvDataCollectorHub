@@ -220,6 +220,7 @@
     <Compile Include="Services\PushWorker.cs" />
     <Compile Include="Services\StatusUploadWorker.cs" />
     <Compile Include="Services\CleanupWorker.cs" />
+    <Compile Include="Services\ModbusServer.cs" />
     <Compile Include="Forms\UIHelper.cs" />
     <Compile Include="Forms\MainForm.cs">
       <SubType>Form</SubType>

@@ -10,7 +10,7 @@ using NLog;
 
 namespace EnvDataCollector.Forms
 {
-    public partial class MainForm : Form
+    public partial class MainForm : Form, ModbusServer.MainStatusProvider
     {
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
 
@@ -24,6 +24,7 @@ namespace EnvDataCollector.Forms
         public readonly PushWorker         Pusher         = new();
         public readonly StatusUploadWorker StatusUploader = new();
         public readonly CleanupWorker      Cleanup        = new();
+        public readonly ModbusServer       Modbus         = new();
 
         private readonly OutboxRepository _outboxRepo = new();
 
@@ -49,6 +50,7 @@ namespace EnvDataCollector.Forms
             Pusher.Start(TokenSvc);
             StatusUploader.Start();
             Cleanup.Start();
+            Modbus.Start(this);
 
             InitPanels();
             _navTree.AfterSelect += (s, e) => Navigate(e.Node?.Name);
@@ -125,9 +127,14 @@ namespace EnvDataCollector.Forms
             });
         }
 
+        // ── ModbusServer.MainStatusProvider 接口 ─────────────
+        public int OpcUaDisconnectedCount() => Opc?.DisconnectedCount() ?? 0;
+        public int CameraActiveCount()      => Cam?.ActiveCount ?? 0;
+
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             _statusTimer.Stop();
+            try { Modbus?.Stop();         } catch { }
             try { Cleanup?.Stop();        } catch { }
             try { StatusUploader?.Stop(); } catch { }
             try { Pusher?.Stop();         } catch { }
