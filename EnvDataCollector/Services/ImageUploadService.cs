@@ -14,7 +14,11 @@ namespace EnvDataCollector.Services
 
         private readonly AppSettingRepository _settings = new();
 
-        private static readonly HttpClient _http = new HttpClient();
+        // 默认 30s 超时；不让单条慢上传卡死后续车牌事件 worker
+        private static readonly HttpClient _http = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(30)
+        };
 
         public string Upload(byte[] imageData, string fileName = "image.jpg")
         {

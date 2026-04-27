@@ -13,10 +13,9 @@ namespace EnvDataCollector.Services
 {
     /// <summary>
     /// 洗车机运行记录拼接服务（消费方）。
-    /// 仅依赖 device_snapshot.startup 字段：0/null=空闲，1=运行；遇到 0→1 边界开记录，
-    /// 1→0 边界关记录并写入 run_record，关闭时调 PlateEventRepository.FindBestMatch 绑车牌。
-    /// 用 AppSetting 存 lastId 游标，重启不丢不重；用 GetLastBefore 恢复"进行中"状态。
-    /// 不绑定 OPC UA 实时事件 —— 等 device_snapshot 落库做完后无缝接上。
+    /// 仅依赖 variable_trend 中 var_role=Startup 的事件：value_str "0"/"1"，
+    /// 0→1 开记录，1→0 关记录并写 run_record，关闭时调 PlateEventRepository.FindBestMatch 绑车牌。
+    /// 用 AppSetting 存 trend.id 游标，重启不丢不重；用 GetLastStartup 恢复"进行中"状态。
     /// </summary>
     public sealed class RunRecordBuilder
     {
@@ -28,9 +27,9 @@ namespace EnvDataCollector.Services
         private const int MaxRunSec       = 14400;   // 4h
         private const int StaleSec        = 600;     // 10min 数据中断阈值
         private const int BatchSize       = 1000;
-        private const string LastIdKey    = "RunRecord.LastScannedSnapshotId";
+        private const string LastIdKey    = "RunRecord.LastTrendId";
 
-        private readonly DeviceSnapshotRepository _snapRepo  = new();
+        private readonly DeviceSnapshotRepository _snapRepo  = new();   // 仍持有但不再读，留作兼容字段
         private readonly VariableTrendRepository  _trendRepo = new();
         private readonly RunRecordRepository      _runRepo   = new();
         private readonly DeviceRepository         _devRepo   = new();
@@ -126,21 +125,21 @@ namespace EnvDataCollector.Services
             int closedCount = 0;
             long maxIdSeen = _lastId;
 
-            // 1) 取增量快照，按 (device_id, time, id) 聚合处理（避免不同设备的快照交错）
-            var batch = _snapRepo.QueryAfter(_lastId, BatchSize).ToList();
+            // 1) 增量取 var_role=Startup 的事件，按 id 升序（id 升序就代表事件发生顺序）
+            var batch = _trendRepo.QueryStartupAfter(_lastId, BatchSize).ToList();
             if (batch.Count == 0)
             {
                 CheckStale(ref closedCount);
                 return closedCount;
             }
 
+            // 2) 按设备分组，组内按 id 升序处理（同设备里 id 单调代表事件先后）
             var grouped = batch
                 .GroupBy(s => s.DeviceId)
-                .Select(g => new { DeviceId = g.Key, Items = g.OrderBy(x => x.Time).ThenBy(x => x.Id).ToList() });
+                .Select(g => new { DeviceId = g.Key, Items = g.OrderBy(x => x.Id).ToList() });
 
             foreach (var dev in grouped)
             {
-                // 仅处理"洗车机"类型
                 var d = _devRepo.GetById(dev.DeviceId);
                 if (d == null || d.DeviceType != "洗车机")
                 {
@@ -150,25 +149,21 @@ namespace EnvDataCollector.Services
 
                 foreach (var s in dev.Items)
                 {
-                    bool isRunning = (s.Startup ?? 0) == 1;
+                    bool isRunning = ParseStartup(s.ValueStr) == 1;
+                    DateTime ts    = ParseTime(s.SourceTime);
                     bool hasOpen   = _open.TryGetValue(d.Id, out var open);
 
                     if (!hasOpen && isRunning)
                     {
-                        _open[d.Id] = new OpenRecord
-                        {
-                            Device    = d,
-                            StartTime = ParseTime(s.Time),
-                            Buffer    = new List<DeviceSnapshotEntity> { s }
-                        };
+                        _open[d.Id] = new OpenRecord { Device = d, StartTime = ts, LastSeen = ts };
                     }
                     else if (hasOpen && isRunning)
                     {
-                        open.Buffer.Add(s);
+                        open.LastSeen = ts;   // 重复 1，刷新心跳
                     }
                     else if (hasOpen && !isRunning)
                     {
-                        if (CloseRecord(open, ParseTime(s.Time), "正常停止")) closedCount++;
+                        if (CloseRecord(open, ts, "正常停止")) closedCount++;
                         _open.Remove(d.Id);
                     }
                     // 无 + 0：忽略
@@ -186,11 +181,11 @@ namespace EnvDataCollector.Services
             CheckStale(ref closedCount);
 
             if (closedCount > 0)
-                Log.Info("RunRecordBuilder 本轮关闭 {0} 条记录，lastId={1}", closedCount, _lastId);
+                Log.Info("RunRecordBuilder 本轮关闭 {0} 条记录，lastTrendId={1}", closedCount, _lastId);
             return closedCount;
         }
 
-        /// <summary>对每个 OpenRecord，若最后一条 snapshot 距今 > StaleSec 强制关闭。</summary>
+        /// <summary>对每个 OpenRecord，若 LastSeen 距今 > StaleSec 强制关闭。</summary>
         private void CheckStale(ref int closedCount)
         {
             if (_open.Count == 0) return;
@@ -198,13 +193,22 @@ namespace EnvDataCollector.Services
             foreach (var kv in _open.ToList())
             {
                 var open = kv.Value;
-                var lastSnapTime = ParseTime(open.Buffer[open.Buffer.Count - 1].Time);
-                if ((now - lastSnapTime).TotalSeconds > StaleSec)
+                if ((now - open.LastSeen).TotalSeconds > StaleSec)
                 {
-                    if (CloseRecord(open, lastSnapTime, "数据中断")) closedCount++;
+                    if (CloseRecord(open, open.LastSeen, "数据中断")) closedCount++;
                     _open.Remove(kv.Key);
                 }
             }
+        }
+
+        /// <summary>把 trend.value_str（"0"/"1"/"true"/"false"）解析成 0/1。</summary>
+        private static int ParseStartup(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return 0;
+            s = s.Trim();
+            if (s == "1" || s.Equals("true", StringComparison.OrdinalIgnoreCase)) return 1;
+            if (double.TryParse(s, out double d)) return d != 0 ? 1 : 0;
+            return 0;
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -347,18 +351,19 @@ namespace EnvDataCollector.Services
             _open.Clear();
             foreach (var d in _devRepo.GetAll(true).Where(x => x.DeviceType == "洗车机"))
             {
-                var last = _snapRepo.GetLastBefore(d.Id, DateTime.Now);
+                var last = _trendRepo.GetLastStartup(d.Id);
                 if (last == null) continue;
-                if ((last.Startup ?? 0) != 1) continue;
+                if (ParseStartup(last.ValueStr) != 1) continue;
 
+                var ts = ParseTime(last.SourceTime);
                 _open[d.Id] = new OpenRecord
                 {
                     Device    = d,
-                    StartTime = ParseTime(last.Time),
-                    Buffer    = new List<DeviceSnapshotEntity> { last }
+                    StartTime = ts,
+                    LastSeen  = ts
                 };
                 Log.Info("Recover：设备 {0} 处于进行中状态（自 {1} 起）",
-                    d.DeviceCode, last.Time);
+                    d.DeviceCode, last.SourceTime);
             }
         }
 
@@ -376,7 +381,7 @@ namespace EnvDataCollector.Services
         {
             public DeviceEntity Device;
             public DateTime StartTime;
-            public List<DeviceSnapshotEntity> Buffer;
+            public DateTime LastSeen;
         }
     }
 }
