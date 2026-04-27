@@ -83,6 +83,19 @@ namespace EnvDataCollector.Models
                 public string  CreatedAt       { get; set; }
     }
 
+    [Table("variable_trend")]
+    public class VariableTrendEntity
+    {
+        [Key]   public long   Id         { get; set; }
+                public int    DeviceId   { get; set; }
+                public int    VariableId { get; set; }
+                public string NodeId     { get; set; }
+                public string VarRole    { get; set; }
+                public string ValueStr   { get; set; }
+                public string SourceTime { get; set; }
+                public string CreatedAt  { get; set; }
+    }
+
     [Table("device_snapshot")]
     public class DeviceSnapshotEntity
     {

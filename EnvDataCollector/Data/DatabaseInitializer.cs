@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS device (
     created_at   TEXT    NOT NULL,
     updated_at   TEXT    NOT NULL,
     UNIQUE(device_code)
-    -- FOREIGN KEY(server_id) REFERENCES opcua_server(id)  -- Íâ¼üÒÑ×¢ÊÍ
+    -- FOREIGN KEY(server_id) REFERENCES opcua_server(id)  -- ï¿½ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½
 );
 
 CREATE TABLE IF NOT EXISTS device_variable (
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS device_variable (
     created_at   TEXT    NOT NULL,
     updated_at   TEXT    NOT NULL,
     UNIQUE(device_id, var_role)
-    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- Íâ¼üÒÑ×¢ÊÍ
+    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- ï¿½ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½
 );
 
 CREATE TABLE IF NOT EXISTS camera_config (
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS camera_config (
     image_base_url   TEXT    NOT NULL,
     created_at       TEXT    NOT NULL,
     updated_at       TEXT    NOT NULL
-    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- Íâ¼üÒÑ×¢ÊÍ
+    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- ï¿½ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½
 );
 
 CREATE TABLE IF NOT EXISTS plate_event (
@@ -87,7 +87,18 @@ CREATE TABLE IF NOT EXISTS plate_event (
     plate_pic_local   TEXT,
     raw_json        TEXT,
     created_at      TEXT    NOT NULL
-    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- Íâ¼üÒÑ×¢ÊÍ
+    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- ï¿½ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½
+);
+
+CREATE TABLE IF NOT EXISTS variable_trend (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id   INTEGER NOT NULL,
+    variable_id INTEGER NOT NULL,
+    node_id     TEXT    NOT NULL,
+    var_role    TEXT    NOT NULL,
+    value_str   TEXT,
+    source_time TEXT    NOT NULL,
+    created_at  TEXT    NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS device_snapshot (
@@ -102,7 +113,7 @@ CREATE TABLE IF NOT EXISTS device_snapshot (
     push_status    TEXT    NOT NULL DEFAULT 'Pending',
     push_error     TEXT,
     created_at     TEXT    NOT NULL
-    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- Íâ¼üÒÑ×¢ÊÍ
+    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- ï¿½ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½
 );
 
 CREATE TABLE IF NOT EXISTS run_record (
@@ -134,7 +145,7 @@ CREATE TABLE IF NOT EXISTS run_record (
     push_status    TEXT    NOT NULL DEFAULT 'Pending',
     push_error     TEXT,
     created_at     TEXT    NOT NULL
-    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- Íâ¼üÒÑ×¢ÊÍ
+    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- ï¿½ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½
 );
 
 CREATE TABLE IF NOT EXISTS push_outbox (
@@ -162,6 +173,8 @@ CREATE TABLE IF NOT EXISTS app_setting (
 
 CREATE INDEX IF NOT EXISTS idx_plate_time   ON plate_event(device_id, event_time);
 CREATE INDEX IF NOT EXISTS idx_snap_time    ON device_snapshot(time);
+CREATE INDEX IF NOT EXISTS idx_trend_dev_time ON variable_trend(device_id, source_time);
+CREATE INDEX IF NOT EXISTS idx_trend_var_time ON variable_trend(variable_id, source_time);
 CREATE INDEX IF NOT EXISTS idx_run_time     ON run_record(start_time);
 CREATE INDEX IF NOT EXISTS idx_outbox_retry ON push_outbox(status, next_retry_time);
 CREATE INDEX IF NOT EXISTS idx_outbox_cre   ON push_outbox(created_at);

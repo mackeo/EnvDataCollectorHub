@@ -31,12 +31,15 @@ namespace EnvDataCollector.Services
         private const string LastIdKey    = "RunRecord.LastScannedSnapshotId";
 
         private readonly DeviceSnapshotRepository _snapRepo  = new();
+        private readonly VariableTrendRepository  _trendRepo = new();
         private readonly RunRecordRepository      _runRepo   = new();
         private readonly DeviceRepository         _devRepo   = new();
         private readonly PlateEventRepository     _plateRepo = new();
         private readonly CameraConfigRepository   _camRepo   = new();
         private readonly OutboxRepository         _outboxRepo = new();
         private readonly AppSettingRepository     _settings  = new();
+
+        private ImageUploadService _imageUploader;
 
         private readonly object _lock = new();
         private readonly Dictionary<int, OpenRecord> _open = new();   // device_id -> 进行中
@@ -46,11 +49,12 @@ namespace EnvDataCollector.Services
 
         public bool Running => _timer != null;
 
-        public void Start()
+        public void Start(ImageUploadService imageUploader = null)
         {
             lock (_lock)
             {
                 if (_timer != null) return;
+                _imageUploader = imageUploader;
                 _lastId = ParseLong(_settings.Get(LastIdKey, "0"), 0);
                 Recover();
                 _timer = new System.Threading.Timer(_ => SafeScan(),
@@ -222,19 +226,21 @@ namespace EnvDataCollector.Services
                 runSec = MaxRunSec;
             }
 
-            // 累积窗口数据：内存 buffer + 补齐 DB 中可能漏的窗口（双保险，用于跨扫描周期的长记录）
-            var snapsAll = new List<DeviceSnapshotEntity>(open.Buffer);
+            // 从 variable_trend SQL 聚合获取运行窗口内变量统计
+            VariableTrendStats currStats, pressStats, flowStats;
             try
             {
-                var ext = _snapRepo.QueryRange(open.Device.Id, open.StartTime, endTime).ToList();
-                if (ext.Count > snapsAll.Count) snapsAll = ext;   // DB 视图更全则用 DB
+                currStats = _trendRepo.GetStats(open.Device.Id, nameof(VarRole.Currents),      open.StartTime, endTime);
+                pressStats = _trendRepo.GetStats(open.Device.Id, nameof(VarRole.WaterPressure), open.StartTime, endTime);
+                flowStats  = _trendRepo.GetStats(open.Device.Id, nameof(VarRole.FlowQuantity),  open.StartTime, endTime);
             }
-            catch (Exception ex) { Log.Debug(ex, "QueryRange 失败，使用内存 buffer"); }
-
-            var currents = snapsAll.Where(s => s.Currents.HasValue).Select(s => s.Currents.Value).ToList();
-            var press    = snapsAll.Where(s => s.WaterPressure.HasValue).Select(s => s.WaterPressure.Value).ToList();
-            var flow     = snapsAll.Where(s => s.FlowQuantity.HasValue).Select(s => s.FlowQuantity.Value).ToList();
-            var lastSnap = snapsAll[snapsAll.Count - 1];
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "variable_trend GetStats 失败，统计数据为空");
+                currStats = new VariableTrendStats();
+                pressStats = new VariableTrendStats();
+                flowStats  = new VariableTrendStats();
+            }
 
             var rec = new RunRecordEntity
             {
@@ -245,21 +251,21 @@ namespace EnvDataCollector.Services
                 EndTime    = endTime.ToString("yyyy-MM-dd HH:mm:ss"),
                 RunTimeSec = runSec,
 
-                Currents      = lastSnap.Currents,
-                WaterPressure = lastSnap.WaterPressure,
-                FlowQuantity  = lastSnap.FlowQuantity,
+                Currents      = currStats.Last,
+                WaterPressure = pressStats.Last,
+                FlowQuantity  = flowStats.Last,
 
-                CurrentsMax    = currents.Count > 0 ? currents.Max() : (double?)null,
-                CurrentsMin    = currents.Count > 0 ? currents.Min() : (double?)null,
-                CurrentsMedian = Median(currents),
+                CurrentsMax      = currStats.Max,
+                CurrentsMin      = currStats.Min,
+                CurrentsMedian   = currStats.Median,
 
-                WaterPressureMax    = press.Count > 0 ? press.Max() : (double?)null,
-                WaterPressureMin    = press.Count > 0 ? press.Min() : (double?)null,
-                WaterPressureMedian = Median(press),
+                WaterPressureMax    = pressStats.Max,
+                WaterPressureMin    = pressStats.Min,
+                WaterPressureMedian = pressStats.Median,
 
-                FlowQuantityMax    = flow.Count > 0 ? flow.Max() : (double?)null,
-                FlowQuantityMin    = flow.Count > 0 ? flow.Min() : (double?)null,
-                FlowQuantityMedian = Median(flow),
+                FlowQuantityMax    = flowStats.Max,
+                FlowQuantityMin    = flowStats.Min,
+                FlowQuantityMedian = flowStats.Median,
 
                 CloseReason = reason,
                 PushStatus  = "Pending"
@@ -279,6 +285,30 @@ namespace EnvDataCollector.Services
                     rec.VehicleNoPicLocal  = plate.PlatePicLocal;
                     rec.VehiclePic         = plate.VehiclePicUrl;
                     rec.VehicleNoPic       = plate.PlatePicUrl;
+
+                    if (_imageUploader != null)
+                    {
+                        if (string.IsNullOrEmpty(rec.VehiclePic) && !string.IsNullOrEmpty(plate.VehiclePicLocal))
+                        {
+                            string remote = _imageUploader.UploadFromLocal(plate.VehiclePicLocal);
+                            if (!string.IsNullOrEmpty(remote))
+                            {
+                                rec.VehiclePic = remote;
+                                try { _plateRepo.UpdateRemoteUrls(plate.Id, remote, plate.PlatePicUrl); }
+                                catch (Exception ex) { Log.Debug(ex, "回填 plate_event vehicle URL 失败"); }
+                            }
+                        }
+                        if (string.IsNullOrEmpty(rec.VehicleNoPic) && !string.IsNullOrEmpty(plate.PlatePicLocal))
+                        {
+                            string remote = _imageUploader.UploadFromLocal(plate.PlatePicLocal);
+                            if (!string.IsNullOrEmpty(remote))
+                            {
+                                rec.VehicleNoPic = remote;
+                                try { _plateRepo.UpdateRemoteUrls(plate.Id, rec.VehiclePic, remote); }
+                                catch (Exception ex) { Log.Debug(ex, "回填 plate_event plate URL 失败"); }
+                            }
+                        }
+                    }
                 }
             }
             catch (Exception ex) { Log.Warn(ex, "FindBestMatch 异常"); }
@@ -335,14 +365,6 @@ namespace EnvDataCollector.Services
         // ═══════════════════════════════════════════════════════════
         // 工具
         // ═══════════════════════════════════════════════════════════
-
-        private static double? Median(List<double> xs)
-        {
-            if (xs == null || xs.Count == 0) return null;
-            var sorted = xs.OrderBy(x => x).ToList();
-            int n = sorted.Count;
-            return n % 2 == 1 ? sorted[n / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0;
-        }
 
         private static DateTime ParseTime(string s) =>
             DateTime.TryParse(s, out var t) ? t : DateTime.Now;

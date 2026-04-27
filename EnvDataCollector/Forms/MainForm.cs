@@ -20,7 +20,9 @@ namespace EnvDataCollector.Forms
         public readonly ImageHttpServer    ImageHttp      = new();
         public readonly RunRecordBuilder   RunBuilder     = new();
         public readonly SnapshotWriter     SnapWriter     = new();
+        public readonly TrendWriter        TrendWriter    = new();
         public readonly TokenService       TokenSvc       = new();
+        public readonly ImageUploadService ImageUploader  = new();
         public readonly PushWorker         Pusher         = new();
         public readonly StatusUploadWorker StatusUploader = new();
         public readonly CleanupWorker      Cleanup        = new();
@@ -43,10 +45,11 @@ namespace EnvDataCollector.Forms
                 Log.Info($"[OpcUA] Server {srvId} {(connected ? "已连接" : "已断开")}");
             };
             Opc.Start();
-            SnapWriter.Start(Opc);
+            //SnapWriter.Start(Opc); // 原数据分析，定时抓取记录瞬时值
+            TrendWriter.Start(Opc);
             ImageHttp.Start();
-            Cam.Start();
-            RunBuilder.Start();
+            Cam.Start(ImageUploader);
+            RunBuilder.Start(ImageUploader);
             Pusher.Start(TokenSvc);
             StatusUploader.Start();
             Cleanup.Start();
@@ -142,6 +145,7 @@ namespace EnvDataCollector.Forms
             try { Cam?.Stop();            } catch { }
             try { ImageHttp?.Stop();      } catch { }
             try { SnapWriter?.Stop();     } catch { }
+            try { TrendWriter?.Stop();    } catch { }
             try { Opc?.Dispose();         } catch { }
             base.OnFormClosing(e);
         }

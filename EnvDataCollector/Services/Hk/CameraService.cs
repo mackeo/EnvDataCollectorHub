@@ -27,6 +27,8 @@ namespace EnvDataCollector.Services.Hk
         private readonly DeviceRepository       _devRepo   = new();
         private readonly PlateEventRepository   _plateRepo = new();
 
+        private ImageUploadService _imageUploader;
+
         // userId -> session 信息（含 deviceId、alarmHandle、配置）
         private readonly Dictionary<int, CameraSession> _sessions = new();
 
@@ -40,9 +42,10 @@ namespace EnvDataCollector.Services.Hk
         public bool Running { get; private set; }
         public int  ActiveCount => _sessions.Count;
 
-        public void Start()
+        public void Start(ImageUploadService imageUploader = null)
         {
             if (Running) return;
+            _imageUploader = imageUploader;
             if (!HikSdkBootstrap.IsInitialized)
             {
                 Log.Warn("CameraService.Start 被跳过：海康 SDK 未初始化");
@@ -260,11 +263,11 @@ namespace EnvDataCollector.Services.Hk
 
             string vehicleLocal = null, plateLocal = null;
             string vehicleUrl   = null, plateUrl   = null;
+            byte[] vehicleData  = null, plateData  = null;
 
             for (int i = 0; i < it.Pictures.Count; i++)
             {
                 var (type, data) = it.Pictures[i];
-                // byType: 1=车辆图, 2=车牌图, 3=二值化图, 0/其它=未知；具体取决于设备型号
                 string label = type switch
                 {
                     1 => "vehicle",
@@ -276,14 +279,26 @@ namespace EnvDataCollector.Services.Hk
                 try { File.WriteAllBytes(fullPath, data); }
                 catch (Exception ex) { Log.Warn(ex, "写图片失败：{0}", fullPath); continue; }
 
-                string relForUrl = $"{it.DeviceCode}/{dayDir}/{fileName}";
-                string url       = $"{it.Config.ImageBaseUrl.TrimEnd('/')}/{relForUrl}";
-                string relLocal  = Path.Combine(it.Config.ImageStorePath.TrimEnd('\\', '/'),
+                string relLocal = Path.Combine(it.Config.ImageStorePath.TrimEnd('\\', '/'),
                                                 it.DeviceCode, dayDir, fileName);
 
-                if (type == 1 && vehicleLocal == null) { vehicleLocal = relLocal; vehicleUrl = url; }
-                else if (type == 2 && plateLocal == null) { plateLocal = relLocal; plateUrl = url; }
-                else if (vehicleLocal == null)             { vehicleLocal = relLocal; vehicleUrl = url; }
+                if (type == 1 && vehicleLocal == null) { vehicleLocal = relLocal; vehicleData = data; }
+                else if (type == 2 && plateLocal == null) { plateLocal = relLocal; plateData = data; }
+                else if (vehicleLocal == null)             { vehicleLocal = relLocal; vehicleData = data; }
+            }
+
+            if (_imageUploader != null)
+            {
+                if (vehicleData != null)
+                {
+                    string remote = _imageUploader.Upload(vehicleData, "vehicle.jpg");
+                    if (!string.IsNullOrEmpty(remote)) vehicleUrl = remote;
+                }
+                if (plateData != null)
+                {
+                    string remote = _imageUploader.Upload(plateData, "plate.jpg");
+                    if (!string.IsNullOrEmpty(remote)) plateUrl = remote;
+                }
             }
 
             try

@@ -18,6 +18,7 @@ namespace EnvDataCollector.Services
         private static readonly Logger Log = LogManager.GetCurrentClassLogger();
 
         private readonly DeviceSnapshotRepository _snapRepo  = new();
+        private readonly VariableTrendRepository  _trendRepo = new();
         private readonly RunRecordRepository      _runRepo   = new();
         private readonly OutboxRepository         _outbox    = new();
         private readonly PlateEventRepository     _plateRepo = new();
@@ -72,6 +73,7 @@ namespace EnvDataCollector.Services
             // SQLite 不返回 affected rows 给 db.Execute（实际上返回，但仓储 API 没透出），
             // 这里只能调一次记录"已尝试"，真实数量由 Log/SQL 反查。简化：不返回精确条数。
             try { _snapRepo.DeleteSuccessOlderThan(cutoff);  r.SnapshotCleaned = true;  } catch (Exception ex) { Log.Warn(ex, "device_snapshot 清理失败"); r.Errors.Add("device_snapshot: " + ex.Message); }
+            try { _trendRepo.DeleteOlderThan(cutoff);       r.TrendCleaned = true;    } catch (Exception ex) { Log.Warn(ex, "variable_trend 清理失败");    r.Errors.Add("variable_trend: "    + ex.Message); }
             try { _runRepo.DeleteSuccessOlderThan(cutoff);   r.RunRecordCleaned = true; } catch (Exception ex) { Log.Warn(ex, "run_record 清理失败");      r.Errors.Add("run_record: "      + ex.Message); }
             try { _outbox.DeleteSuccessOlderThan(cutoff);    r.OutboxCleaned = true;    } catch (Exception ex) { Log.Warn(ex, "push_outbox 清理失败");     r.Errors.Add("push_outbox: "     + ex.Message); }
             try { _plateRepo.DeleteOlderThan(cutoff);        r.PlateCleaned = true;     } catch (Exception ex) { Log.Warn(ex, "plate_event 清理失败");     r.Errors.Add("plate_event: "     + ex.Message); }
@@ -138,6 +140,7 @@ namespace EnvDataCollector.Services
         {
             public DateTime  Cutoff;
             public bool      SnapshotCleaned;
+            public bool      TrendCleaned;
             public bool      RunRecordCleaned;
             public bool      OutboxCleaned;
             public bool      PlateCleaned;
@@ -150,9 +153,9 @@ namespace EnvDataCollector.Services
             {
                 if (Skipped) return "上一次清理还在跑，已跳过";
                 if (Error != null) return "清理异常：" + Error;
-                int tablesOk = (SnapshotCleaned ? 1 : 0) + (RunRecordCleaned ? 1 : 0) +
+                int tablesOk = (SnapshotCleaned ? 1 : 0) + (TrendCleaned ? 1 : 0) + (RunRecordCleaned ? 1 : 0) +
                                (OutboxCleaned ? 1 : 0) + (PlateCleaned ? 1 : 0);
-                string msg = $"截止 {Cutoff:yyyy-MM-dd}：表清理 {tablesOk}/4，删图目录 {ImagesDeleted}";
+                string msg = $"截止 {Cutoff:yyyy-MM-dd}：表清理 {tablesOk}/5，删图目录 {ImagesDeleted}";
                 if (Errors.Count > 0) msg += $"（{Errors.Count} 个错误）";
                 return msg;
             }
