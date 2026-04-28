@@ -127,12 +127,15 @@ namespace EnvDataCollector.Models
                 public double? FlowQuantity  { get; set; }
                 public double? CurrentsMax      { get; set; }
                 public double? CurrentsMin      { get; set; }
+                public double? CurrentsAvg      { get; set; }
                 public double? CurrentsMedian   { get; set; }
                 public double? WaterPressureMax    { get; set; }
                 public double? WaterPressureMin    { get; set; }
+                public double? WaterPressureAvg    { get; set; }
                 public double? WaterPressureMedian { get; set; }
                 public double? FlowQuantityMax     { get; set; }
                 public double? FlowQuantityMin     { get; set; }
+                public double? FlowQuantityAvg     { get; set; }
                 public double? FlowQuantityMedian  { get; set; }
                 public string  VehicleNo     { get; set; }
                 // ★ 本地图片路径（留痕 + 补推时读取）

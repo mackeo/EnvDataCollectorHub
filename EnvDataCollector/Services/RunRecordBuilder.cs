@@ -261,14 +261,17 @@ namespace EnvDataCollector.Services
 
                 CurrentsMax      = currStats.Max,
                 CurrentsMin      = currStats.Min,
+                CurrentsAvg      = currStats.Avg,
                 CurrentsMedian   = currStats.Median,
 
                 WaterPressureMax    = pressStats.Max,
                 WaterPressureMin    = pressStats.Min,
+                WaterPressureAvg    = pressStats.Avg,
                 WaterPressureMedian = pressStats.Median,
 
                 FlowQuantityMax    = flowStats.Max,
                 FlowQuantityMin    = flowStats.Min,
+                FlowQuantityAvg    = flowStats.Avg,
                 FlowQuantityMedian = flowStats.Median,
 
                 CloseReason = reason,
@@ -334,7 +337,23 @@ namespace EnvDataCollector.Services
                 {
                     int maxRetry = _settings.Get<int>(SK.MaxRetryCount, 10);
                     rec.Id = newId;
-                    string json = Newtonsoft.Json.JsonConvert.SerializeObject(rec);
+
+                    string mode = _settings.Get(SK.EventStatMode, "Avg");
+                    var payload = new
+                    {
+                        rec.Id, rec.DeviceId, rec.DeviceType, rec.DeviceCode,
+                        rec.StartTime, rec.EndTime, rec.RunTimeSec,
+                        Currents      = PickStat(rec, mode, nameof(VarRole.Currents)),
+                        WaterPressure = PickStat(rec, mode, nameof(VarRole.WaterPressure)),
+                        FlowQuantity  = PickStat(rec, mode, nameof(VarRole.FlowQuantity)),
+                        rec.CurrentsMax, rec.CurrentsMin, rec.CurrentsAvg, rec.CurrentsMedian,
+                        rec.WaterPressureMax, rec.WaterPressureMin, rec.WaterPressureAvg, rec.WaterPressureMedian,
+                        rec.FlowQuantityMax, rec.FlowQuantityMin, rec.FlowQuantityAvg, rec.FlowQuantityMedian,
+                        rec.VehicleNo, rec.VehiclePic, rec.VehicleNoPic,
+                        rec.CloseReason
+                    };
+
+                    string json = Newtonsoft.Json.JsonConvert.SerializeObject(payload);
                     _outboxRepo.Enqueue("event", eventUrl, json, "run_record", newId, maxRetry);
                 }
             }
@@ -376,6 +395,29 @@ namespace EnvDataCollector.Services
 
         private static long ParseLong(string s, long def) =>
             long.TryParse(s, out var v) ? v : def;
+
+        private static double? PickStat(RunRecordEntity rec, string mode, string varRole)
+        {
+            return varRole switch
+            {
+                nameof(VarRole.Currents) => mode.Equals("Max", StringComparison.OrdinalIgnoreCase) ? rec.CurrentsMax
+                                           : mode.Equals("Min", StringComparison.OrdinalIgnoreCase) ? rec.CurrentsMin
+                                           : mode.Equals("Avg", StringComparison.OrdinalIgnoreCase) ? rec.CurrentsAvg
+                                           : mode.Equals("Median", StringComparison.OrdinalIgnoreCase) ? rec.CurrentsMedian
+                                           : rec.Currents,
+                nameof(VarRole.WaterPressure) => mode.Equals("Max", StringComparison.OrdinalIgnoreCase) ? rec.WaterPressureMax
+                                                  : mode.Equals("Min", StringComparison.OrdinalIgnoreCase) ? rec.WaterPressureMin
+                                                  : mode.Equals("Avg", StringComparison.OrdinalIgnoreCase) ? rec.WaterPressureAvg
+                                                  : mode.Equals("Median", StringComparison.OrdinalIgnoreCase) ? rec.WaterPressureMedian
+                                                  : rec.WaterPressure,
+                nameof(VarRole.FlowQuantity) => mode.Equals("Max", StringComparison.OrdinalIgnoreCase) ? rec.FlowQuantityMax
+                                                : mode.Equals("Min", StringComparison.OrdinalIgnoreCase) ? rec.FlowQuantityMin
+                                                : mode.Equals("Avg", StringComparison.OrdinalIgnoreCase) ? rec.FlowQuantityAvg
+                                                : mode.Equals("Median", StringComparison.OrdinalIgnoreCase) ? rec.FlowQuantityMedian
+                                                : rec.FlowQuantity,
+                _ => null
+            };
+        }
 
         private sealed class OpenRecord
         {

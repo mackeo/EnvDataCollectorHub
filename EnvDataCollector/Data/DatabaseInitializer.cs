@@ -9,6 +9,7 @@ namespace EnvDataCollector.Data
         {
             using IDbConnection db = DbHelper.Open();
             db.Execute(Ddl);
+            try { db.Execute(MigrateSql); } catch { }
         }
 
         private const string Ddl = @"
@@ -39,7 +40,7 @@ CREATE TABLE IF NOT EXISTS device (
     created_at   TEXT    NOT NULL,
     updated_at   TEXT    NOT NULL,
     UNIQUE(device_code)
-    -- FOREIGN KEY(server_id) REFERENCES opcua_server(id)  -- �����ע��
+    -- FOREIGN KEY(server_id) REFERENCES opcua_server(id)  -- 外键已注释
 );
 
 CREATE TABLE IF NOT EXISTS device_variable (
@@ -54,7 +55,7 @@ CREATE TABLE IF NOT EXISTS device_variable (
     created_at   TEXT    NOT NULL,
     updated_at   TEXT    NOT NULL,
     UNIQUE(device_id, var_role)
-    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- �����ע��
+    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- 外键已注释
 );
 
 CREATE TABLE IF NOT EXISTS camera_config (
@@ -72,7 +73,7 @@ CREATE TABLE IF NOT EXISTS camera_config (
     image_base_url   TEXT    NOT NULL,
     created_at       TEXT    NOT NULL,
     updated_at       TEXT    NOT NULL
-    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- �����ע��
+    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- 外键已注释
 );
 
 CREATE TABLE IF NOT EXISTS plate_event (
@@ -87,7 +88,7 @@ CREATE TABLE IF NOT EXISTS plate_event (
     plate_pic_local   TEXT,
     raw_json        TEXT,
     created_at      TEXT    NOT NULL
-    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- �����ע��
+    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- 外键已注释
 );
 
 CREATE TABLE IF NOT EXISTS variable_trend (
@@ -113,7 +114,7 @@ CREATE TABLE IF NOT EXISTS device_snapshot (
     push_status    TEXT    NOT NULL DEFAULT 'Pending',
     push_error     TEXT,
     created_at     TEXT    NOT NULL
-    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- �����ע��
+    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- 外键已注释
 );
 
 CREATE TABLE IF NOT EXISTS run_record (
@@ -129,12 +130,15 @@ CREATE TABLE IF NOT EXISTS run_record (
     flow_quantity  REAL,
     currents_max           REAL,
     currents_min           REAL,
+    currents_avg           REAL,
     currents_median        REAL,
     water_pressure_max     REAL,
     water_pressure_min     REAL,
+    water_pressure_avg     REAL,
     water_pressure_median  REAL,
     flow_quantity_max      REAL,
     flow_quantity_min      REAL,
+    flow_quantity_avg      REAL,
     flow_quantity_median   REAL,
     vehicle_no     TEXT,
     vehicle_pic    TEXT,
@@ -145,7 +149,7 @@ CREATE TABLE IF NOT EXISTS run_record (
     push_status    TEXT    NOT NULL DEFAULT 'Pending',
     push_error     TEXT,
     created_at     TEXT    NOT NULL
-    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- �����ע��
+    -- FOREIGN KEY(device_id) REFERENCES device(id)  -- 外键已注释
 );
 
 CREATE TABLE IF NOT EXISTS push_outbox (
@@ -178,6 +182,12 @@ CREATE INDEX IF NOT EXISTS idx_trend_var_time ON variable_trend(variable_id, sou
 CREATE INDEX IF NOT EXISTS idx_run_time     ON run_record(start_time);
 CREATE INDEX IF NOT EXISTS idx_outbox_retry ON push_outbox(status, next_retry_time);
 CREATE INDEX IF NOT EXISTS idx_outbox_cre   ON push_outbox(created_at);
+";
+
+        private const string MigrateSql = @"
+ALTER TABLE run_record ADD COLUMN currents_avg           REAL;
+ALTER TABLE run_record ADD COLUMN water_pressure_avg     REAL;
+ALTER TABLE run_record ADD COLUMN flow_quantity_avg      REAL;
 ";
     }
 }

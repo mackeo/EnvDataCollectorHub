@@ -12,6 +12,7 @@ namespace EnvDataCollector.Data.Repositories
     {
         public double? Max;
         public double? Min;
+        public double? Avg;
         public double? Median;
         public double? Last;
     }
@@ -98,6 +99,7 @@ namespace EnvDataCollector.Data.Repositories
                 SELECT
                     MAX(CAST(value_str AS REAL)) AS Max,
                     MIN(CAST(value_str AS REAL)) AS Min,
+                    AVG(CAST(value_str AS REAL)) AS Avg,
                     (SELECT CAST(value_str AS REAL) FROM variable_trend
                      WHERE device_id=@deviceId AND var_role=@varRole
                        AND source_time BETWEEN @f AND @t
@@ -114,6 +116,7 @@ namespace EnvDataCollector.Data.Repositories
             {
                 Max    = row.Max,
                 Min    = row.Min,
+                Avg    = row.Avg,
                 Median = median,
                 Last   = row.Last
             };

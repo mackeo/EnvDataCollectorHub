@@ -59,7 +59,7 @@ namespace EnvDataCollector.Services
             }
 
             string pass = string.IsNullOrEmpty(passEnc) ? "" : CryptoHelper.Decrypt(passEnc);
-            string body = new JObject { ["username"] = user, ["password"] = pass }.ToString();
+            string body = new JObject { ["clientId"] = user, ["secret"] = pass }.ToString();
 
             try
             {
@@ -102,12 +102,6 @@ namespace EnvDataCollector.Services
             }
         }
 
-        /// <summary>容错解析多种响应格式：
-        /// {"token":"x","expireTime":"yyyy-MM-dd HH:mm:ss"}
-        /// {"data":{"token":"x"},"expireSec":3600}
-        /// {"access_token":"x","expires_in":3600}
-        /// {"code":0,"data":{"token":"x","expireSec":3600}}
-        /// </summary>
         private static (string token, DateTime? expires) ParseTokenResponse(string json)
         {
             JObject root;
@@ -115,6 +109,14 @@ namespace EnvDataCollector.Services
             catch { return (null, null); }
 
             string token = FindFirstString(root, "token", "access_token", "accessToken", "Token");
+            if (string.IsNullOrEmpty(token))
+            {
+                var dataToken = root["data"];
+                if (dataToken != null && dataToken.Type == JTokenType.Object)
+                {
+                    token = FindFirstString((JObject)dataToken, "data_0", "token", "access_token");
+                }
+            }
             if (string.IsNullOrEmpty(token)) return (null, null);
 
             // 优先绝对时间
@@ -127,8 +129,9 @@ namespace EnvDataCollector.Services
             if (sec.HasValue && sec.Value > 0)
                 return (token, DateTime.Now.AddSeconds(sec.Value));
 
-            // 没有过期信息：默认 1 小时
-            return (token, DateTime.Now.AddHours(1));
+            // 没有过期信息：默认时长
+            // qtcom 2小时过期
+            return (token, DateTime.Now.AddMinutes(36));
         }
 
         private static string FindFirstString(JObject root, params string[] names)
@@ -174,7 +177,9 @@ namespace EnvDataCollector.Services
         {
             string t = GetToken();
             if (string.IsNullOrEmpty(t)) return false;
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", t);
+            //qtcom为jwt-token
+            req.Headers.Authorization = new AuthenticationHeaderValue("jwt-token", t);
+            //req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", t);
             return true;
         }
     }

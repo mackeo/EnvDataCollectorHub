@@ -47,7 +47,7 @@ namespace EnvDataCollector.Forms
             Opc.Start();
             //SnapWriter.Start(Opc); // 原数据分析，定时抓取记录瞬时值
             TrendWriter.Start(Opc);
-            ImageHttp.Start();
+            //ImageHttp.Start(); // 调环保系统图片上传接口，不是内部调用
             Cam.Start(ImageUploader);
             RunBuilder.Start(ImageUploader);
             Pusher.Start(TokenSvc, ImageUploader);

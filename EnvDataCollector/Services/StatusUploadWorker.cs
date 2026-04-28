@@ -93,14 +93,17 @@ namespace EnvDataCollector.Services
 
                 double? currVal  = mode.Equals("Max", StringComparison.OrdinalIgnoreCase) ? curr.Max
                                   : mode.Equals("Min", StringComparison.OrdinalIgnoreCase) ? curr.Min
+                                  : mode.Equals("Avg", StringComparison.OrdinalIgnoreCase) ? curr.Avg
                                   : mode.Equals("Median", StringComparison.OrdinalIgnoreCase) ? curr.Median
                                   : curr.Last;
                 double? pressVal = mode.Equals("Max", StringComparison.OrdinalIgnoreCase) ? press.Max
                                   : mode.Equals("Min", StringComparison.OrdinalIgnoreCase) ? press.Min
+                                  : mode.Equals("Avg", StringComparison.OrdinalIgnoreCase) ? press.Avg
                                   : mode.Equals("Median", StringComparison.OrdinalIgnoreCase) ? press.Median
                                   : press.Last;
                 double? flowVal  = mode.Equals("Max", StringComparison.OrdinalIgnoreCase) ? flow.Max
                                   : mode.Equals("Min", StringComparison.OrdinalIgnoreCase) ? flow.Min
+                                  : mode.Equals("Avg", StringComparison.OrdinalIgnoreCase) ? flow.Avg
                                   : mode.Equals("Median", StringComparison.OrdinalIgnoreCase) ? flow.Median
                                   : flow.Last;
 
@@ -109,17 +112,23 @@ namespace EnvDataCollector.Services
                     deviceCode    = d.DeviceCode,
                     deviceType    = d.DeviceType,
                     time          = to.ToString("yyyy-MM-dd HH:mm:ss"),
-                    online        = 1,           // 能产生 trend 就视为在线；OPC 断线时 online 由 status 历史推断
-                    startup       = startup,
+                    online = 1,           // 能产生 trend 就视为在线；OPC 断线时 online 由 status 历史推断
+                    startup = startup,
                     currents      = currVal,
                     currentsMax   = curr.Max,
                     currentsMin   = curr.Min,
+                    currentsAvg   = curr.Avg,
+                    currentsMedian = curr.Median,
                     waterPressure = pressVal,
                     waterPressureMax = press.Max,
                     waterPressureMin = press.Min,
+                    waterPressureAvg = press.Avg,
+                    waterPressureMedian = press.Median,
                     flowQuantity  = flowVal,
                     flowQuantityMax = flow.Max,
                     flowQuantityMin = flow.Min,
+                    flowQuantityAvg = flow.Avg,
+                    flowQuantityMedian = flow.Median,
                     statMode      = mode
                 };
                 string json = JsonConvert.SerializeObject(payload);

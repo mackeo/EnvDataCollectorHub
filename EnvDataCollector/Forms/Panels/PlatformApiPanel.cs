@@ -107,6 +107,16 @@ namespace EnvDataCollector.Forms.Panels
         {
             try
             {
+                if (_chkToken.Checked)
+                {
+                    if (string.IsNullOrWhiteSpace(_txtToken.Text))
+                        { SetError(_lblResult, "❌ 启用 JWT 鉴权时，Token URL 不能为空"); return; }
+                    if (string.IsNullOrWhiteSpace(_txtUser.Text))
+                        { SetError(_lblResult, "❌ 启用 JWT 鉴权时，Token 用户名不能为空"); return; }
+                    if (string.IsNullOrWhiteSpace(_txtPwd.Text))
+                        { SetError(_lblResult, "❌ 启用 JWT 鉴权时，Token 密码不能为空"); return; }
+                }
+
                 _settings.Set(SK.StatusApiUrl,            _txtStatus.Text.Trim());
                 _settings.Set(SK.EventApiUrl,             _txtEvent.Text.Trim());
                 _settings.Set(SK.ImageUploadUrl,          _txtImageUpload.Text.Trim());

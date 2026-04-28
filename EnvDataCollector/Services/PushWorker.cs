@@ -73,7 +73,7 @@ namespace EnvDataCollector.Services
         private int Run()
         {
             int batchSize  = _settings.Get<int>(SK.RetryBatchSize, 20);
-            int timeoutSec = _settings.Get<int>(SK.HttpTimeoutSec, 30);
+            int timeoutSec = _settings.Get<int>(SK.HttpTimeoutSec, 15);
             int baseSec    = _settings.Get<int>(SK.RetryIntervalSec, 10);
             string backoff = _settings.Get(SK.RetryBackoff, "Exponential");
             bool tokenEnabled = _settings.Get<int>(SK.TokenEnabled, 0) == 1;
