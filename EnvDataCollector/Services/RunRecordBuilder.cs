@@ -337,11 +337,11 @@ namespace EnvDataCollector.Services
                 {
                     int maxRetry = _settings.Get<int>(SK.MaxRetryCount, 10);
                     rec.Id = newId;
-
+                    DateTime to = DateTime.Now;
                     string mode = _settings.Get(SK.EventStatMode, "Avg");
                     var payload = new
                     {
-                        rec.Id, rec.DeviceId, rec.DeviceType, rec.DeviceCode,
+                        /*rec.Id, rec.DeviceId, rec.DeviceType, rec.DeviceCode,
                         rec.StartTime, rec.EndTime, rec.RunTimeSec,
                         Currents      = PickStat(rec, mode, nameof(VarRole.Currents)),
                         WaterPressure = PickStat(rec, mode, nameof(VarRole.WaterPressure)),
@@ -350,7 +350,19 @@ namespace EnvDataCollector.Services
                         rec.WaterPressureMax, rec.WaterPressureMin, rec.WaterPressureAvg, rec.WaterPressureMedian,
                         rec.FlowQuantityMax, rec.FlowQuantityMin, rec.FlowQuantityAvg, rec.FlowQuantityMedian,
                         rec.VehicleNo, rec.VehiclePic, rec.VehicleNoPic,
-                        rec.CloseReason
+                        rec.CloseReason*/
+                        Time = to.ToString("yyyy-MM-dd HH:mm:ss"),
+                        DeviceType = rec.DeviceType,
+                        DeviceCode = rec.DeviceCode,
+                        Currents = PickStat(rec, mode, nameof(VarRole.Currents)),
+                        WaterPressure = PickStat(rec, mode, nameof(VarRole.WaterPressure)),
+                        FlowQuantity = PickStat(rec, mode, nameof(VarRole.FlowQuantity)),
+                        StartTime = rec.StartTime,
+                        EndTime = rec.EndTime,
+                        RunTime = rec.RunTimeSec,
+                        VehicleNo = rec.VehicleNo,
+                        VehiclePic = rec.VehiclePic,
+                        VehicleNoPic = rec.VehicleNoPic,
                     };
 
                     string json = Newtonsoft.Json.JsonConvert.SerializeObject(payload);

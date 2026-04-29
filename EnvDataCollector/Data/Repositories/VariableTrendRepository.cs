@@ -83,6 +83,56 @@ namespace EnvDataCollector.Data.Repositories
                 new { deviceId, role = nameof(VarRole.Startup) });
         }
 
+        /// <summary>
+        /// 按 mode 只计算一种统计值（Last/Max/Min/Avg/Median）。
+        /// RunRecordBuilder 不传 mode（全量计算），StatusUploadWorker 传 mode 只算一个。
+        /// </summary>
+        public double? GetStat(int deviceId, string varRole, DateTime from, DateTime to, string mode)
+        {
+            var p = new
+            {
+                deviceId,
+                varRole,
+                f = from.ToString("yyyy-MM-dd HH:mm:ss"),
+                t = to.ToString("yyyy-MM-dd HH:mm:ss")
+            };
+
+            using IDbConnection db = DbHelper.Open();
+
+            if (mode.Equals("Max", StringComparison.OrdinalIgnoreCase))
+            {
+                return db.QueryFirstOrDefault<double?>(@"
+                    SELECT MAX(CAST(value_str AS REAL)) FROM variable_trend
+                    WHERE device_id=@deviceId AND var_role=@varRole
+                      AND source_time BETWEEN @f AND @t", p);
+            }
+            if (mode.Equals("Min", StringComparison.OrdinalIgnoreCase))
+            {
+                return db.QueryFirstOrDefault<double?>(@"
+                    SELECT MIN(CAST(value_str AS REAL)) FROM variable_trend
+                    WHERE device_id=@deviceId AND var_role=@varRole
+                      AND source_time BETWEEN @f AND @t", p);
+            }
+            if (mode.Equals("Avg", StringComparison.OrdinalIgnoreCase))
+            {
+                return db.QueryFirstOrDefault<double?>(@"
+                    SELECT AVG(CAST(value_str AS REAL)) FROM variable_trend
+                    WHERE device_id=@deviceId AND var_role=@varRole
+                      AND source_time BETWEEN @f AND @t", p);
+            }
+            if (mode.Equals("Median", StringComparison.OrdinalIgnoreCase))
+            {
+                return QueryMedian(db, p.deviceId, p.varRole, p.f, p.t);
+            }
+            // Last（默认）
+            return db.QueryFirstOrDefault<double?>(@"
+                SELECT CAST(value_str AS REAL) FROM variable_trend
+                WHERE device_id=@deviceId AND var_role=@varRole
+                  AND source_time BETWEEN @f AND @t
+                ORDER BY source_time DESC, id DESC LIMIT 1", p);
+        }
+
+        /// <summary>全量计算（RunRecordBuilder 用）。</summary>
         public VariableTrendStats GetStats(int deviceId, string varRole, DateTime from, DateTime to)
         {
             var p = new
