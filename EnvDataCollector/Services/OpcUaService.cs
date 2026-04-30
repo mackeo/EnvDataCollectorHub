@@ -289,6 +289,35 @@ namespace EnvDataCollector.Services
             catch (Exception ex) { return (false, null, ex.Message); }
         }
 
+        public void ReadNodeValues(int serverId, List<OpcNodeInfo> nodes)
+        {
+            if (nodes == null || nodes.Count == 0) return;
+            if (!_ctxs.TryGetValue(serverId, out var ctx)) return;
+            int batch = 50;
+            for (int i = 0; i < nodes.Count; i += batch)
+            {
+                var slice = nodes.Skip(i).Take(batch).ToList();
+                var ids = new ReadValueIdCollection();
+                foreach (var n in slice)
+                    ids.Add(new ReadValueId
+                        { NodeId = new NodeId(n.NodeId), AttributeId = Attributes.Value });
+                try
+                {
+                    ctx.Session.Read(null, 0, TimestampsToReturn.Both, ids, out var results, out _);
+                    for (int j = 0; j < slice.Count && j < results.Count; j++)
+                    {
+                        if (StatusCode.IsGood(results[j].StatusCode))
+                        {
+                            slice[j].Value = results[j].Value?.ToString();
+                            if (results[j].Value != null)
+                                slice[j].DataType = results[j].Value.GetType().Name;
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+
         public void ForceReconnect(int serverId)
         {
             if (_ctxs.TryGetValue(serverId, out var ctx))

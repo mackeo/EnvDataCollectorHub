@@ -76,7 +76,7 @@ namespace EnvDataCollector.Forms.Panels
             tbl.AddRow4("用户名",       _txtUser,   "密码",        _txtPwd);
             tbl.AddRow4("匹配前置(秒)", _numPre,    "匹配后置(秒)",_numPost);
             AddSingleRow(tbl, "图片保存路径", _txtPath);
-            AddSingleRow(tbl, "图片访问 URL", _txtUrl);
+            AddSingleRow(tbl, "图片访问 URL(弃用)", _txtUrl);
             tbl.AddRow4Span(_chkEnabled, height: 30);
 
             var formPanel = UIHelper.WrapFormPanel(tbl, height: 7 * 28 + 40);
@@ -183,8 +183,8 @@ namespace EnvDataCollector.Forms.Panels
             if (string.IsNullOrEmpty(user)) { Tip("用户名不能为空");     return; }
             if (string.IsNullOrEmpty(pwd))  { Tip("密码不能为空");       return; }
             if (string.IsNullOrEmpty(path)) { Tip("图片保存路径不能为空"); return; }
-            if (string.IsNullOrEmpty(url))  { Tip("图片访问 URL 不能为空"); return; }
-            if (!Uri.TryCreate(url, UriKind.Absolute, out _)) { Tip("图片访问 URL 格式不合法"); return; }
+            //if (string.IsNullOrEmpty(url))  { Tip("图片访问 URL 不能为空"); return; }
+            //if (!Uri.TryCreate(url, UriKind.Absolute, out _)) { Tip("图片访问 URL 格式不合法"); return; }
 
             // 一个洗车机只能绑定一条摄像头：检查是否被别的记录占用
             var exist = _repo.GetByDevice(dev.Id);

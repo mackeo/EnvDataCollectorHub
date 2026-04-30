@@ -1,6 +1,5 @@
 using System;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 using EnvDataCollector.Data.Repositories;
@@ -172,14 +171,12 @@ namespace EnvDataCollector.Services
             return null;
         }
 
-        /// <summary>给 HttpRequestMessage 加 Bearer 头，若 token 无效则不加。</summary>
+        /// <summary>给 HttpRequestMessage 加 jwt-token 自定义头，若 token 无效则不加。</summary>
         public bool ApplyBearer(HttpRequestMessage req)
         {
             string t = GetToken();
             if (string.IsNullOrEmpty(t)) return false;
-            //qtcom为jwt-token
-            req.Headers.Authorization = new AuthenticationHeaderValue("jwt-token", t);
-            //req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", t);
+            req.Headers.Add("jwt-token", t);
             return true;
         }
     }

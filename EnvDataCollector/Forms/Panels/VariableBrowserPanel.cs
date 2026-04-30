@@ -1,5 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using EnvDataCollector.Data.Repositories;
 using EnvDataCollector.Models;
@@ -19,6 +23,8 @@ namespace EnvDataCollector.Forms.Panels
         private TreeView     _treeOpc;
         private Label        _lblStatus;
         private bool         _refreshing;
+        private CancellationTokenSource _searchCts;
+        private Button       _btnSearch;
 
         public VariableBrowserPanel(MainForm main) { _main = main; BuildUI(); }
 
@@ -31,10 +37,10 @@ namespace EnvDataCollector.Forms.Panels
             _txtSearch = UIHelper.MakeToolbarTextBox(148, "关键字搜索变量");
 
             var btnBrowse  = UIHelper.MakeBtn("🌲 浏览",    UIHelper.C.Dark);
-            var btnSearch  = UIHelper.MakeBtn("🔍 搜索",    UIHelper.C.Primary);
+            _btnSearch     = UIHelper.MakeBtn("🔍 搜索",    UIHelper.C.Primary);
             var btnDelBind = UIHelper.MakeBtn("✂ 删除绑定", UIHelper.C.Danger);
             btnBrowse.Click  += (s, e) => Browse();
-            btnSearch.Click  += (s, e) => Search();
+            _btnSearch.Click += (s, e) => Search();
             btnDelBind.Click += (s, e) => DeleteBinding();
             _cmbDevice.SelectedIndexChanged += (s, e) =>
             {
@@ -45,7 +51,7 @@ namespace EnvDataCollector.Forms.Panels
             var toolbar = UIHelper.MakeToolbar(
                 UIHelper.InlineLabel("设备:"), _cmbDevice,
                 UIHelper.InlineLabel("Server:"), _cmbServer,
-                _txtSearch, btnBrowse, btnSearch, btnDelBind, _lblStatus);
+                _txtSearch, btnBrowse, _btnSearch, btnDelBind, _lblStatus);
 
             // ── 主体三栏 ────────────────────────────────────
             _treeOpc = new TreeView
@@ -58,9 +64,11 @@ namespace EnvDataCollector.Forms.Panels
 
             _gridResult = UIHelper.MakeGrid();
             _gridResult.Columns.AddRange(
-                UIHelper.Col("NodeId", "NodeId",  140),
-                UIHelper.Col("Name",   "显示名",  120),
-                UIHelper.Col("Path",   "路径",      0, true));
+                UIHelper.Col("NodeId",    "NodeId",     140),
+                UIHelper.Col("DisplayName", "显示名",    120),
+                UIHelper.Col("DataType",  "数据类型",    90),
+                UIHelper.Col("Value",     "当前值",      110),
+                UIHelper.Col("BrowsePath", "路径",        0, true));
             _gridResult.MouseDoubleClick += (s, e) => ResultDoubleClick();
 
             _gridBound = UIHelper.MakeGrid();
@@ -126,22 +134,75 @@ namespace EnvDataCollector.Forms.Panels
         {
             if (_cmbServer.SelectedItem is not UIHelper.Item srv)
             { SetError(_lblStatus, "请先选择 OPC UA Server"); return; }
-            _gridResult.Rows.Clear();
-            SetInfo(_lblStatus, "搜索中...");
-            try
+
+            if (_searchCts != null)
             {
-                var list = _main.Opc.Search(srv.Id, _txtSearch.Text.Trim());
-                foreach (var n in list) _gridResult.Rows.Add(n.NodeId, n.DisplayName, n.BrowsePath);
-                SetOk(_lblStatus, $"搜索结果 {list.Count} 条");
+                _searchCts.Cancel();
+                _searchCts.Dispose();
+                _searchCts = null;
+                _btnSearch.Text = "🔍 搜索";
+                SetInfo(_lblStatus, "已取消搜索");
+                return;
             }
-            catch (Exception ex) { SetError(_lblStatus, "搜索失败：" + ex.Message); }
+
+            _gridResult.Rows.Clear();
+            var cts = new CancellationTokenSource();
+            _searchCts = cts;
+            _btnSearch.Text = "⏹ 取消";
+            SetInfo(_lblStatus, "搜索中...");
+            int sid = srv.Id;
+            string kw = _txtSearch.Text.Trim();
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    var list = _main.Opc.Search(sid, kw);
+                    cts.Token.ThrowIfCancellationRequested();
+
+                    this.Invoke((Action)(() =>
+                    {
+                        foreach (var n in list)
+                            _gridResult.Rows.Add(n.NodeId, n.DisplayName, n.DataType, n.Value, n.BrowsePath);
+                        SetOk(_lblStatus, $"搜索结果 {list.Count} 条，读取值中...");
+                    }));
+
+                    _main.Opc.ReadNodeValues(sid, list);
+                    cts.Token.ThrowIfCancellationRequested();
+
+                    this.Invoke((Action)(() =>
+                    {
+                        for (int i = 0; i < list.Count && i < _gridResult.Rows.Count; i++)
+                        {
+                            if (list[i].Value != null)
+                                _gridResult.Rows[i].Cells["Value"].Value = list[i].Value;
+                            if (list[i].DataType != null)
+                                _gridResult.Rows[i].Cells["DataType"].Value = list[i].DataType;
+                        }
+                        SetOk(_lblStatus, $"搜索完成 {list.Count} 条");
+                    }));
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    try { this.Invoke((Action)(() => SetError(_lblStatus, "搜索失败：" + ex.Message))); }
+                    catch { }
+                }
+                finally
+                {
+                    try { this.Invoke((Action)(() => { _btnSearch.Text = "🔍 搜索"; })); }
+                    catch { }
+                    if (_searchCts == cts) _searchCts = null;
+                    cts.Dispose();
+                }
+            });
         }
 
         private void ResultDoubleClick()
         {
             if (_gridResult.SelectedRows.Count == 0) return;
             string nid  = _gridResult.SelectedRows[0].Cells["NodeId"].Value?.ToString();
-            string name = _gridResult.SelectedRows[0].Cells["Name"].Value?.ToString();
+            string name = _gridResult.SelectedRows[0].Cells["DisplayName"].Value?.ToString();
             if (!string.IsNullOrEmpty(nid)) PromptBind(nid, name);
         }
 

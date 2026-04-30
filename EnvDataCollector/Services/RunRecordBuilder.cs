@@ -29,6 +29,7 @@ namespace EnvDataCollector.Services
         private const int BatchSize       = 1000;
         private const string LastIdKey    = "RunRecord.LastTrendId";
 
+        private static readonly string[] vehicleNoColors = { "黑", "白", "蓝", "黄", "绿" };
         private readonly DeviceSnapshotRepository _snapRepo  = new();   // 仍持有但不再读，留作兼容字段
         private readonly VariableTrendRepository  _trendRepo = new();
         private readonly RunRecordRepository      _runRepo   = new();
@@ -360,7 +361,7 @@ namespace EnvDataCollector.Services
                         StartTime = rec.StartTime,
                         EndTime = rec.EndTime,
                         RunTime = rec.RunTimeSec,
-                        VehicleNo = rec.VehicleNo,
+                        VehicleNo = RemoveColorPrefix(rec.VehicleNo),
                         VehiclePic = rec.VehiclePic,
                         VehicleNoPic = rec.VehicleNoPic,
                     };
@@ -429,6 +430,22 @@ namespace EnvDataCollector.Services
                                                 : rec.FlowQuantity,
                 _ => null
             };
+        }
+
+        public string RemoveColorPrefix(string licensePlate)
+        {
+            if (string.IsNullOrEmpty(licensePlate))
+                return licensePlate;
+
+            foreach (var color in vehicleNoColors)
+            {
+                if (licensePlate.StartsWith(color))
+                {
+                    return licensePlate.Substring(color.Length);
+                }
+            }
+
+            return licensePlate;
         }
 
         private sealed class OpenRecord
