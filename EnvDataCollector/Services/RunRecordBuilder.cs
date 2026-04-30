@@ -340,6 +340,21 @@ namespace EnvDataCollector.Services
                     rec.Id = newId;
                     DateTime to = DateTime.Now;
                     string mode = _settings.Get(SK.EventStatMode, "Avg");
+                    double? currVal = null, pressVal = null, flowVal = null;
+                    try
+                    {
+                        currVal = PickStat(rec, mode, nameof(VarRole.Currents));
+                        pressVal = PickStat(rec, "Max", nameof(VarRole.WaterPressure));
+                        flowVal = PickStat(rec, mode, nameof(VarRole.FlowQuantity));
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"获取统计数据异常: {ex.Message}");
+                    }
+                    currVal = currVal.HasValue ? Math.Round(currVal.Value, 3) : currVal;
+                    pressVal = pressVal.HasValue ? Math.Round(pressVal.Value, 3) : pressVal;
+                    flowVal = flowVal.HasValue ? Math.Round(flowVal.Value, 3) : flowVal;
+
                     var payload = new
                     {
                         /*rec.Id, rec.DeviceId, rec.DeviceType, rec.DeviceCode,
@@ -355,9 +370,9 @@ namespace EnvDataCollector.Services
                         Time = to.ToString("yyyy-MM-dd HH:mm:ss"),
                         DeviceType = rec.DeviceType,
                         DeviceCode = rec.DeviceCode,
-                        Currents = PickStat(rec, mode, nameof(VarRole.Currents)),
-                        WaterPressure = PickStat(rec, mode, nameof(VarRole.WaterPressure)),
-                        FlowQuantity = PickStat(rec, mode, nameof(VarRole.FlowQuantity)),
+                        Currents = currVal,
+                        WaterPressure = pressVal,
+                        FlowQuantity = flowVal,
                         StartTime = rec.StartTime,
                         EndTime = rec.EndTime,
                         RunTime = rec.RunTimeSec,

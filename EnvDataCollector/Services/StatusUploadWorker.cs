@@ -76,10 +76,14 @@ namespace EnvDataCollector.Services
                 try
                 {
                     currVal  = _trendRepo.GetStat(d.Id, nameof(VarRole.Currents),      from, to, mode);
-                    pressVal = _trendRepo.GetStat(d.Id, nameof(VarRole.WaterPressure), from, to, mode);
+                    pressVal = _trendRepo.GetStat(d.Id, nameof(VarRole.WaterPressure), from, to, "Max");
                     flowVal  = _trendRepo.GetStat(d.Id, nameof(VarRole.FlowQuantity),  from, to, mode);
                 }
                 catch (Exception ex) { Log.Warn(ex, "GetStat 失败 dev={0}", d.Id); continue; }
+
+                currVal = currVal.HasValue ? Math.Round(currVal.Value, 3) : currVal;
+                pressVal = pressVal.HasValue ? Math.Round(pressVal.Value, 3) : pressVal;
+                flowVal = flowVal.HasValue ? Math.Round(flowVal.Value, 3) : flowVal;
 
                 int? startup = null;
                 var lastStartup = _trendRepo.GetLatest(d.Id, nameof(VarRole.Startup));
