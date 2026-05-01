@@ -42,6 +42,15 @@ namespace EnvDataCollector.Services.Hk
         public bool Running { get; private set; }
         public int  ActiveCount => _sessions.Count;
 
+        public bool IsDeviceOnline(int deviceId)
+        {
+            foreach (var kv in _sessions)
+            {
+                if (kv.Value.DeviceId == deviceId) return true;
+            }
+            return false;
+        }
+
         public void Start(ImageUploadService imageUploader = null)
         {
             if (Running) return;

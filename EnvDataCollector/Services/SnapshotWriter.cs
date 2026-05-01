@@ -30,7 +30,7 @@ namespace EnvDataCollector.Services
         private readonly Dictionary<int, LiveState> _state = new();
         private OpcUaService _opc;
         private System.Threading.Timer _timer;
-        private Action<int, string, object, DateTime> _onValueHandler;
+        private Action<int, string, object, DateTime, bool> _onValueHandler;
         private Action<int, bool> _onSessionHandler;
 
         public bool Running       => _timer != null;
@@ -67,7 +67,7 @@ namespace EnvDataCollector.Services
         // OPC UA 事件入口
         // ═══════════════════════════════════════════════════════════
 
-        private void OnValue(int deviceId, string role, object value, DateTime ts)
+        private void OnValue(int deviceId, string role, object value, DateTime ts, bool good)
         {
             try
             {

@@ -26,7 +26,7 @@ namespace EnvDataCollector.Services
         private const int KeepAliveIntervalMs = 5000;   // 5秒一次探活
         private const int KeepAliveMaxMissed = 3;      // 连续 3 次失败则断开重连
 
-        public event Action<int, string, object, DateTime> OnValueChanged;
+        public event Action<int, string, object, DateTime, bool> OnValueChanged;
         public event Action<int, bool> OnSessionState;
 
         public void Start()
@@ -204,8 +204,11 @@ namespace EnvDataCollector.Services
                     mi.Notification += (item, _) =>
                     {
                         if (item.LastValue is MonitoredItemNotification n)
+                        {
+                            bool good = StatusCode.IsGood(n.Value?.StatusCode ?? StatusCodes.Bad);
                             OnValueChanged?.Invoke(did, role, n.Value?.Value,
-                                n.Value?.SourceTimestamp.ToLocalTime() ?? DateTime.Now);
+                                n.Value?.SourceTimestamp.ToLocalTime() ?? DateTime.Now, good);
+                        }
                     };
                     sub.AddItem(mi);
                 }
@@ -306,7 +309,9 @@ namespace EnvDataCollector.Services
                     ctx.Session.Read(null, 0, TimestampsToReturn.Both, ids, out var results, out _);
                     for (int j = 0; j < slice.Count && j < results.Count; j++)
                     {
-                        if (StatusCode.IsGood(results[j].StatusCode))
+                        bool good = StatusCode.IsGood(results[j].StatusCode);
+                        slice[j].Quality = good ? "Good" : "Bad";
+                        if (good)
                         {
                             slice[j].Value = results[j].Value?.ToString();
                             if (results[j].Value != null)

@@ -27,19 +27,25 @@ namespace EnvDataCollector.Services
 
         private readonly object _lastLock = new();
         private readonly Dictionary<(int, string), string> _lastValues = new();
+        private readonly ConcurrentDictionary<(int, string), bool> _qualityCache = new();
         private readonly ConcurrentDictionary<(int, string), VarInfo> _varInfoCache = new();
 
         private readonly ConcurrentQueue<VariableTrendEntity> _queue = new();
         private long _droppedCount;       // 因背压丢弃的条目数（统计用）
 
         private OpcUaService _opc;
-        private Action<int, string, object, DateTime> _onValueHandler;
+        private Action<int, string, object, DateTime, bool> _onValueHandler;
         private System.Threading.Timer _flushTimer;
         private volatile bool _flushing;
 
         public bool Running => _opc != null;
         public int  PendingCount => _queue.Count;
         public long DroppedCount => Interlocked.Read(ref _droppedCount);
+
+        public bool IsQualityGood(int deviceId, string role)
+        {
+            return _qualityCache.TryGetValue((deviceId, role), out bool good) && good;
+        }
 
         public void Start(OpcUaService opc)
         {
@@ -70,6 +76,7 @@ namespace EnvDataCollector.Services
             SafeFlush();
 
             lock (_lastLock) _lastValues.Clear();
+            _qualityCache.Clear();
             _varInfoCache.Clear();
         }
 
@@ -80,10 +87,12 @@ namespace EnvDataCollector.Services
         // OPC UA 事件入口（仅做"是否变化"判断 + 入队，IO 全部丢给 worker）
         // ═══════════════════════════════════════════════════════════
 
-        private void OnValue(int deviceId, string role, object value, DateTime ts)
+        private void OnValue(int deviceId, string role, object value, DateTime ts, bool good)
         {
             try
             {
+                _qualityCache[(deviceId, role)] = good;
+
                 string valueStr = value?.ToString() ?? "";
                 var key = (deviceId, role);
 

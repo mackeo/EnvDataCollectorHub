@@ -75,6 +75,7 @@ namespace EnvDataCollector.Models
         public string BrowseName  { get; set; }
         public string DataType    { get; set; }
         public string Value       { get; set; }
+        public string Quality     { get; set; }
         public string BrowsePath  { get; set; }
         public bool   IsVariable  { get; set; }
     }

@@ -68,14 +68,16 @@ namespace EnvDataCollector.Forms.Panels
                 UIHelper.Col("DisplayName", "显示名",    120),
                 UIHelper.Col("DataType",  "数据类型",    90),
                 UIHelper.Col("Value",     "当前值",      110),
+                UIHelper.Col("Quality",   "状态",        55),
                 UIHelper.Col("BrowsePath", "路径",        0, true));
             _gridResult.MouseDoubleClick += (s, e) => ResultDoubleClick();
 
             _gridBound = UIHelper.MakeGrid();
             _gridBound.Columns.AddRange(
-                UIHelper.Col("Role",   "角色",   90),
-                UIHelper.Col("Name",   "显示名", 110),
-                UIHelper.Col("NodeId", "NodeId",   0, true));
+                UIHelper.Col("Role",    "角色",   90),
+                UIHelper.Col("Name",    "显示名", 110),
+                UIHelper.Col("Quality", "状态",    55),
+                UIHelper.Col("NodeId",  "NodeId",   0, true));
 
             var body = UIHelper.MakeThreeColBody(28, 42, 30);
             body.Controls.Add(UIHelper.ColPane("OPC UA 节点浏览",      _treeOpc),    0, 0);
@@ -163,7 +165,7 @@ namespace EnvDataCollector.Forms.Panels
                     this.Invoke((Action)(() =>
                     {
                         foreach (var n in list)
-                            _gridResult.Rows.Add(n.NodeId, n.DisplayName, n.DataType, n.Value, n.BrowsePath);
+                            _gridResult.Rows.Add(n.NodeId, n.DisplayName, n.DataType, n.Value, n.Quality, n.BrowsePath);
                         SetOk(_lblStatus, $"搜索结果 {list.Count} 条，读取值中...");
                     }));
 
@@ -178,6 +180,8 @@ namespace EnvDataCollector.Forms.Panels
                                 _gridResult.Rows[i].Cells["Value"].Value = list[i].Value;
                             if (list[i].DataType != null)
                                 _gridResult.Rows[i].Cells["DataType"].Value = list[i].DataType;
+                            if (list[i].Quality != null)
+                                _gridResult.Rows[i].Cells["Quality"].Value = list[i].Quality;
                         }
                         SetOk(_lblStatus, $"搜索完成 {list.Count} 条");
                     }));
@@ -266,7 +270,11 @@ namespace EnvDataCollector.Forms.Panels
             _gridBound.Rows.Clear();
             if (_cmbDevice.SelectedItem is not UIHelper.Item dev) return;
             foreach (var v in _varRepo.GetByDevice(dev.Id))
-                if (v.Enabled == 1) _gridBound.Rows.Add(v.VarRole, v.DisplayName, v.NodeId);
+            {
+                if (v.Enabled != 1) continue;
+                string quality = _main.TrendWriter.IsQualityGood(dev.Id, v.VarRole) ? "Good" : "Bad";
+                _gridBound.Rows.Add(v.VarRole, v.DisplayName, quality, v.NodeId);
+            }
         }
 
         private void SyncServerFromDevice()

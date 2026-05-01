@@ -51,7 +51,7 @@ namespace EnvDataCollector.Forms
             Cam.Start(ImageUploader);
             RunBuilder.Start(ImageUploader);
             Pusher.Start(TokenSvc, ImageUploader);
-            StatusUploader.Start();
+            StatusUploader.Start(Opc, TrendWriter, Cam);
             Cleanup.Start();
             Modbus.Start(this);
 
