@@ -142,11 +142,11 @@ namespace EnvDataCollector.Services
             foreach (var dev in grouped)
             {
                 var d = _devRepo.GetById(dev.DeviceId);
-                if (d == null || d.DeviceType != "洗车机")
+                /*if (d == null || d.DeviceType != "洗车机")
                 {
                     foreach (var s in dev.Items) if (s.Id > maxIdSeen) maxIdSeen = s.Id;
                     continue;
-                }
+                }*/
 
                 foreach (var s in dev.Items)
                 {

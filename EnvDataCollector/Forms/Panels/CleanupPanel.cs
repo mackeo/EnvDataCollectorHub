@@ -32,14 +32,16 @@ namespace EnvDataCollector.Forms.Panels
                     "   关联图片目录（images/{deviceCode}/yyyyMMdd/）也会按截止日期整目录删除。\n" +
                     "   失败/待推送数据保留以便补传。",
                 ForeColor = Color.OrangeRed,
-                AutoSize  = true,
-                Padding   = new Padding(0, 4, 0, 0)
+                Dock      = DockStyle.Fill,
+                Padding   = new Padding(0, 8, 0, 0)
             };
 
             var tbl = UIHelper.MakeFormTable(labelWidth: 110);
             tbl.AddRow("保留天数",    _numDays);
             tbl.AddRow("清理周期(h)", _numHours);
-            tbl.AddRowSpan(note, height: 60);
+            tbl.AddRowSpan(note, height: 72);
+            note.Dock = DockStyle.Fill;
+            note.Margin = new Padding(0);
 
             var btnSave  = UIHelper.MakeBtn("💾 保存策略");
             var btnClean = UIHelper.MakeBtn("🗑 立即清理", UIHelper.C.Danger);
@@ -47,7 +49,7 @@ namespace EnvDataCollector.Forms.Panels
             btnClean.Click += (s, e) => CleanNow(btnClean);
             tbl.AddBtnRow(btnSave, btnClean, _lblResult);
 
-            Controls.Add(UIHelper.WrapFormPanel(tbl, height: 240,
+            Controls.Add(UIHelper.WrapFormPanel(tbl, height: 260,
                 padding: new Padding(20, 16, 20, 8)));
         }
 

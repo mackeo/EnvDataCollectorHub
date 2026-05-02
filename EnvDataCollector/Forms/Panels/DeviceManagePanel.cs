@@ -164,18 +164,20 @@ namespace EnvDataCollector.Forms.Panels
 
         private void Delete()
         {
-            if (_editId <= 0) { Tip("请先选择一条记录"); return; }
+            if (_grid.SelectedRows.Count == 0) { Tip("请先选择一条记录"); return; }
+            if (!int.TryParse(_grid.SelectedRows[0].Cells["Id"].Value?.ToString(), out int id)) { Tip("无法获取设备ID"); return; }
 
-            int varCnt = _repo.CountVariables(_editId);
-            int camCnt = _repo.CountCameras(_editId);
+            int varCnt = _repo.CountVariables(id);
+            int camCnt = _repo.CountCameras(id);
+            string code = _grid.SelectedRows[0].Cells["Code"].Value?.ToString() ?? "";
             string extra = (varCnt + camCnt) > 0
                 ? $"\n将同时删除：{varCnt} 条变量绑定、{camCnt} 条摄像头配置。"
                 : "";
-            if (!Confirm($"确认删除设备「{_txtCode.Text}」？{extra}\n（历史运行记录与状态快照会保留作为审计留痕）")) return;
+            if (!Confirm($"确认删除设备「{code}」？{extra}\n（历史运行记录与状态快照会保留作为审计留痕）")) return;
 
             try
             {
-                _repo.DeleteCascade(_editId);
+                _repo.DeleteCascade(id);
             }
             catch (Exception ex)
             {
@@ -191,17 +193,19 @@ namespace EnvDataCollector.Forms.Panels
 
         private void ToggleEnabled()
         {
-            if (_editId <= 0) { Tip("请先选择一条记录"); return; }
-            var d = _repo.GetById(_editId); if (d == null) return;
+            if (_grid.SelectedRows.Count == 0) { Tip("请先选择一条记录"); return; }
+            if (!int.TryParse(_grid.SelectedRows[0].Cells["Id"].Value?.ToString(), out int id)) { Tip("无法获取设备ID"); return; }
+            var d = _repo.GetById(id); if (d == null) return;
             d.Enabled = d.Enabled == 1 ? 0 : 1;
             _repo.Update(d);
             _chkEnabled.Checked = _editEnabled = d.Enabled == 1;
+            _editId = id;
             SyncToggleBtn(_btnToggle, _editEnabled);
             SetResult(_lblResult,
                 _editEnabled ? "✅ 已启用" : "⏸ 已禁用",
                 _editEnabled ? UIHelper.C.Success : Color.OrangeRed);
             RefreshData();
-            _grid.SelectRowById(_editId);
+            _grid.SelectRowById(id);
         }
 
         private void UnbindServer()

@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Net.Http;
-using System.Net.Http.Headers;
+using System.Text;
 using EnvDataCollector.Data.Repositories;
 using Newtonsoft.Json.Linq;
 using NLog;
@@ -31,12 +31,17 @@ namespace EnvDataCollector.Services
 
             try
             {
-                using var content = new MultipartFormDataContent();
-                var fileContent = new ByteArrayContent(imageData);
-                fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("image/jpeg");
-                content.Add(fileContent, "file", fileName);
-
-                using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+                string base64 = Convert.ToBase64String(imageData);
+                var payload = new JObject
+                {
+                    ["fileName"] = fileName,
+                    ["fileBase64"] = base64
+                };
+                using var req = new HttpRequestMessage(HttpMethod.Post, url)
+                {
+                    Content = new StringContent(payload.ToString(Newtonsoft.Json.Formatting.None),
+                        Encoding.UTF8, "application/json")
+                };
 
                 var resp = _http.SendAsync(req).GetAwaiter().GetResult();
                 string respText = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
