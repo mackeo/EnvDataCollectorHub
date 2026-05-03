@@ -25,7 +25,7 @@ namespace EnvDataCollector.Services
         private const int ScanIntervalSec = 5;
         private const int MinRunSec       = 3;
         private const int MaxRunSec       = 14400;   // 4h
-        private const int StaleSec        = 600;     // 10min 数据中断阈值
+        private const int StaleSec        = 900;     // 15min 数据中断阈值（留缓冲给 TrendWriter flush）
         private const int BatchSize       = 1000;
         private const string LastIdKey    = "RunRecord.LastTrendId";
 
@@ -126,7 +126,6 @@ namespace EnvDataCollector.Services
             int closedCount = 0;
             long maxIdSeen = _lastId;
 
-            // 1) 增量取 var_role=Startup 的事件，按 id 升序（id 升序就代表事件发生顺序）
             var batch = _trendRepo.QueryStartupAfter(_lastId, BatchSize).ToList();
             if (batch.Count == 0)
             {
@@ -134,7 +133,9 @@ namespace EnvDataCollector.Services
                 return closedCount;
             }
 
-            // 2) 按设备分组，组内按 id 升序处理（同设备里 id 单调代表事件先后）
+            /*Log.Debug("Scan() 读到 {0} 条 Startup 事件，id 范围 [{1}..{2}]",
+                batch.Count, batch.Min(x => x.Id), batch.Max(x => x.Id));*/
+
             var grouped = batch
                 .GroupBy(s => s.DeviceId)
                 .Select(g => new { DeviceId = g.Key, Items = g.OrderBy(x => x.Id).ToList() });
@@ -154,20 +155,25 @@ namespace EnvDataCollector.Services
                     DateTime ts    = ParseTime(s.SourceTime);
                     bool hasOpen   = _open.TryGetValue(d.Id, out var open);
 
+                    /*Log.Debug("Scan() 处理事件 id={0} dev={1} value={2} ts={3} hasOpen={4}",
+                        s.Id, d.DeviceCode, s.ValueStr, ts.ToString("HH:mm:ss"), hasOpen);*/
+
                     if (!hasOpen && isRunning)
                     {
                         _open[d.Id] = new OpenRecord { Device = d, StartTime = ts, LastSeen = ts };
+                        //Log.Debug("  → 创建 OpenRecord，StartTime={0}", ts.ToString("HH:mm:ss"));
                     }
                     else if (hasOpen && isRunning)
                     {
-                        open.LastSeen = ts;   // 重复 1，刷新心跳
+                        var oldLastSeen = open.LastSeen;
+                        open.LastSeen = ts;
+                        //Log.Debug("  → 刷新 LastSeen: {0} → {1}", oldLastSeen.ToString("HH:mm:ss"), ts.ToString("HH:mm:ss"));
                     }
                     else if (hasOpen && !isRunning)
                     {
                         if (CloseRecord(open, ts, "正常停止")) closedCount++;
                         _open.Remove(d.Id);
                     }
-                    // 无 + 0：忽略
 
                     if (s.Id > maxIdSeen) maxIdSeen = s.Id;
                 }
@@ -194,8 +200,14 @@ namespace EnvDataCollector.Services
             foreach (var kv in _open.ToList())
             {
                 var open = kv.Value;
-                if ((now - open.LastSeen).TotalSeconds > StaleSec)
+                double elapsed = (now - open.LastSeen).TotalSeconds;
+                /*Log.Debug("CheckStale: dev={0} LastSeen={1} now={2} elapsed={3:F0}s threshold={4}s",
+                    open.Device.DeviceCode, open.LastSeen.ToString("HH:mm:ss"),
+                    now.ToString("HH:mm:ss"), elapsed, StaleSec);*/
+                if (elapsed > StaleSec)
                 {
+                    Log.Warn("CheckStale 触发: dev={0} LastSeen={1} elapsed={2:F0}s > {3}s",
+                        open.Device.DeviceCode, open.LastSeen.ToString("HH:mm:ss"), elapsed, StaleSec);
                     if (CloseRecord(open, open.LastSeen, "数据中断")) closedCount++;
                     _open.Remove(kv.Key);
                 }
@@ -333,6 +345,12 @@ namespace EnvDataCollector.Services
             // 事件上报入队（EventApiUrl 未配则跳过，不 spam）
             try
             {
+                // 沟通之后是否跳过
+                // 如果为事件上传，且关联表为 run_record，为数据中断，则跳过。
+                // 这种为接收到启动后 长时间为关闭或程序关闭很久后程序重启 “推送到推送队列”的 事件
+                //if (!"正常停止".Equals(reason)) {
+                //    return true;
+                //}
                 string eventUrl = _settings.Get(SK.EventApiUrl);
                 if (!string.IsNullOrWhiteSpace(eventUrl))
                 {

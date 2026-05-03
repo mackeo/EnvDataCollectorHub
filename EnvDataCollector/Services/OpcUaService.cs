@@ -222,19 +222,27 @@ namespace EnvDataCollector.Services
             if (!_ctxs.TryGetValue(serverId, out var ctx)) return new();
             var startId = string.IsNullOrEmpty(parentNodeId)
                 ? ObjectIds.ObjectsFolder : new NodeId(parentNodeId);
-            ctx.Session.Browse(null, null, startId, 0,
-                BrowseDirection.Forward, ReferenceTypeIds.HierarchicalReferences,
-                true, (uint)(NodeClass.Variable | NodeClass.Object), out _, out var refs);
-            var list = new List<OpcNodeInfo>();
-            foreach (var r in refs)
-                list.Add(new OpcNodeInfo
-                {
-                    NodeId = r.NodeId.ToString(),
-                    DisplayName = r.DisplayName.Text,
-                    BrowseName = r.BrowseName.Name,
-                    IsVariable = r.NodeClass == NodeClass.Variable
-                });
-            return list;
+            try
+            {
+                ctx.Session.Browse(null, null, startId, 0,
+                    BrowseDirection.Forward, ReferenceTypeIds.HierarchicalReferences,
+                    true, (uint)(NodeClass.Variable | NodeClass.Object), out _, out var refs);
+                var list = new List<OpcNodeInfo>();
+                foreach (var r in refs)
+                    list.Add(new OpcNodeInfo
+                    {
+                        NodeId = r.NodeId.ToString(),
+                        DisplayName = r.DisplayName.Text,
+                        BrowseName = r.BrowseName.Name,
+                        IsVariable = r.NodeClass == NodeClass.Variable
+                    });
+                return list;
+            }
+            catch (Exception ex)
+            {
+                Log.Warn(ex, "Browse 失败 serverId={0}", serverId);
+                return new();
+            }
         }
 
         public List<OpcNodeInfo> Search(int serverId, string keyword)
@@ -250,9 +258,18 @@ namespace EnvDataCollector.Services
             string kw, string path, List<OpcNodeInfo> result, int depth)
         {
             if (depth > 8 || result.Count >= 300) return;
-            session.Browse(null, null, nodeId, 0,
-                BrowseDirection.Forward, ReferenceTypeIds.HierarchicalReferences,
-                true, (uint)(NodeClass.Variable | NodeClass.Object), out _, out var refs);
+            ReferenceDescriptionCollection refs;
+            try
+            {
+                session.Browse(null, null, nodeId, 0,
+                    BrowseDirection.Forward, ReferenceTypeIds.HierarchicalReferences,
+                    true, (uint)(NodeClass.Variable | NodeClass.Object), out _, out refs);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "RecurseBrowse Browse 失败 nodeId={0}", nodeId);
+                return;
+            }
             foreach (var r in refs)
             {
                 string fp = string.IsNullOrEmpty(path)
@@ -272,7 +289,11 @@ namespace EnvDataCollector.Services
                             IsVariable = true
                         });
                 }
-                RecurseBrowse(session, (NodeId)r.NodeId, kw, fp, result, depth + 1);
+                NodeId childId;
+                try { childId = (NodeId)r.NodeId; }
+                catch { continue; }
+                if (childId == null) continue;
+                RecurseBrowse(session, childId, kw, fp, result, depth + 1);
             }
         }
 

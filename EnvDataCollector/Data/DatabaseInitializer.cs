@@ -10,6 +10,7 @@ namespace EnvDataCollector.Data
             using IDbConnection db = DbHelper.Open();
             db.Execute(Ddl);
             try { db.Execute(MigrateSql); } catch { }
+            try { db.Execute(IndexMigrate); } catch { }
         }
 
         private const string Ddl = @"
@@ -175,19 +176,62 @@ CREATE TABLE IF NOT EXISTS app_setting (
     updated_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_plate_time   ON plate_event(device_id, event_time);
-CREATE INDEX IF NOT EXISTS idx_snap_time    ON device_snapshot(time);
-CREATE INDEX IF NOT EXISTS idx_trend_dev_time ON variable_trend(device_id, source_time);
-CREATE INDEX IF NOT EXISTS idx_trend_var_time ON variable_trend(variable_id, source_time);
-CREATE INDEX IF NOT EXISTS idx_run_time     ON run_record(start_time);
-CREATE INDEX IF NOT EXISTS idx_outbox_retry ON push_outbox(status, next_retry_time);
-CREATE INDEX IF NOT EXISTS idx_outbox_cre   ON push_outbox(created_at);
+
+CREATE INDEX IF NOT EXISTS idx_vt_dev_role_src  ON variable_trend(device_id, var_role, source_time);
+-- QueryStartupAfter：id > @lastId AND var_role = 'Startup'
+CREATE INDEX IF NOT EXISTS idx_vt_role_id       ON variable_trend(var_role, id);
+-- QueryRange：device_id + source_time（不含 var_role）
+CREATE INDEX IF NOT EXISTS idx_vt_dev_src       ON variable_trend(device_id, source_time);
+-- DeleteOlderThan：created_at
+CREATE INDEX IF NOT EXISTS idx_vt_created       ON variable_trend(created_at);
+
+-- ── plate_event ──────────────────────────────────────────
+-- FindBestMatch + Query：device_id + event_time
+CREATE INDEX IF NOT EXISTS idx_pe_dev_event     ON plate_event(device_id, event_time);
+-- DeleteOlderThan：created_at
+CREATE INDEX IF NOT EXISTS idx_pe_created       ON plate_event(created_at);
+
+-- ── device_snapshot ──────────────────────────────────────
+-- GetLastBefore / QueryRange：device_id + time
+CREATE INDEX IF NOT EXISTS idx_ds_dev_time      ON device_snapshot(device_id, time);
+-- DeleteSuccessOlderThan：push_status + created_at
+CREATE INDEX IF NOT EXISTS idx_ds_status_cre    ON device_snapshot(push_status, created_at);
+
+-- ── run_record ───────────────────────────────────────────
+-- Query：start_time 范围查询
+CREATE INDEX IF NOT EXISTS idx_rr_start         ON run_record(start_time);
+-- Query + 筛选：device_code
+CREATE INDEX IF NOT EXISTS idx_rr_dev_code      ON run_record(device_code);
+-- DeleteSuccessOlderThan：push_status + created_at
+CREATE INDEX IF NOT EXISTS idx_rr_status_cre    ON run_record(push_status, created_at);
+
+-- ── push_outbox ──────────────────────────────────────────
+-- DequeueDue：status + retry_count + next_retry_time + created_at
+CREATE INDEX IF NOT EXISTS idx_po_due           ON push_outbox(status, retry_count, next_retry_time, created_at);
+-- GetPage：status + created_at
+CREATE INDEX IF NOT EXISTS idx_po_status_cre    ON push_outbox(status, created_at);
+-- DeleteSuccessOlderThan：status + updated_at
+CREATE INDEX IF NOT EXISTS idx_po_status_upd    ON push_outbox(status, updated_at);
+
+-- ── device ───────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_dev_enabled      ON device(enabled);
+
 ";
 
         private const string MigrateSql = @"
 ALTER TABLE run_record ADD COLUMN currents_avg           REAL;
 ALTER TABLE run_record ADD COLUMN water_pressure_avg     REAL;
 ALTER TABLE run_record ADD COLUMN flow_quantity_avg      REAL;
+";
+
+        private const string IndexMigrate = @"
+DROP INDEX IF EXISTS idx_plate_time;
+DROP INDEX IF EXISTS idx_snap_time;
+DROP INDEX IF EXISTS idx_trend_dev_time;
+DROP INDEX IF EXISTS idx_trend_var_time;
+DROP INDEX IF EXISTS idx_run_time;
+DROP INDEX IF EXISTS idx_outbox_retry;
+DROP INDEX IF EXISTS idx_outbox_cre;
 ";
     }
 }

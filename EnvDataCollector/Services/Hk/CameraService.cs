@@ -280,7 +280,7 @@ namespace EnvDataCollector.Services.Hk
                 string label = type switch
                 {
                     1 => "vehicle",
-                    2 => "plate",
+                    0 => "plate",
                     _ => $"type{type}"
                 };
                 string fileName = $"{stamp}_{i}_{label}.jpg";
@@ -292,7 +292,7 @@ namespace EnvDataCollector.Services.Hk
                                                 it.DeviceCode, dayDir, fileName);
 
                 if (type == 1 && vehicleLocal == null) { vehicleLocal = relLocal; vehicleData = data; }
-                else if (type == 2 && plateLocal == null) { plateLocal = relLocal; plateData = data; }
+                else if (type == 0 && plateLocal == null) { plateLocal = relLocal; plateData = data; }
                 else if (vehicleLocal == null)             { vehicleLocal = relLocal; vehicleData = data; }
             }
 
