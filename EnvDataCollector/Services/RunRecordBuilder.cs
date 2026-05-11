@@ -108,6 +108,72 @@ namespace EnvDataCollector.Services
             return true;
         }
 
+        /// <summary>
+        /// 对已存在的 RunRecord 检查 push_outbox 是否有对应任务，
+        /// 若无则重新构建 payload 入队，并更新 push_status。
+        /// 返回: true=已入队, false=已存在跳过, null=异常/条件不满足
+        /// </summary>
+        public bool? ReEnqueue(long runRecordId)
+        {
+            var rec = _runRepo.GetById(runRecordId);
+            if (rec == null) return null;
+
+            using (IDbConnection db = DbHelper.Open())
+            {
+                int exists = db.QuerySingle<int>(@"
+                    SELECT COUNT(*) FROM push_outbox
+                    WHERE related_table='run_record' AND related_id=@id
+                      AND status IN ('Pending','Failed')",
+                    new { id = runRecordId });
+                if (exists > 0) return false;
+            }
+
+            string eventUrl = _settings.Get(SK.EventApiUrl);
+            if (string.IsNullOrWhiteSpace(eventUrl)) return null;
+
+            int maxRetry = _settings.Get<int>(SK.MaxRetryCount, 3);
+            string mode = _settings.Get(SK.EventStatMode, "Avg");
+            double? currVal = null, pressVal = null, flowVal = null;
+            try
+            {
+                currVal = PickStat(rec, mode, nameof(VarRole.Currents));
+                pressVal = PickStat(rec, "Max", nameof(VarRole.WaterPressure));
+                flowVal = PickStat(rec, mode, nameof(VarRole.FlowQuantity));
+            }
+            catch { }
+            currVal = currVal.HasValue ? Math.Round(currVal.Value, 3) : currVal;
+            pressVal = pressVal.HasValue ? Math.Round(pressVal.Value, 3) : pressVal;
+            flowVal = flowVal.HasValue ? Math.Round(flowVal.Value, 3) : flowVal;
+
+            var payload = new
+            {
+                Time = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                DeviceType = rec.DeviceType,
+                DeviceCode = rec.DeviceCode,
+                Currents = currVal,
+                WaterPressure = pressVal,
+                FlowQuantity = flowVal,
+                StartTime = rec.StartTime,
+                EndTime = rec.EndTime,
+                RunTime = rec.RunTimeSec,
+                VehicleNo = RemoveColorPrefix(rec.VehicleNo),
+                VehiclePic = rec.VehiclePic,
+                VehicleNoPic = rec.VehicleNoPic,
+            };
+
+            string json = Newtonsoft.Json.JsonConvert.SerializeObject(payload);
+            _outboxRepo.Enqueue("event", eventUrl, json, "run_record", runRecordId, maxRetry);
+
+            using (IDbConnection db = DbHelper.Open())
+            {
+                db.Execute("UPDATE run_record SET push_status='Pending', push_error=NULL WHERE id=@id",
+                    new { id = runRecordId });
+            }
+
+            Log.Info("ReEnqueue：run_record #{0} 已入队 push_outbox", runRecordId);
+            return true;
+        }
+
         // ═══════════════════════════════════════════════════════════
         // 核心扫描
         // ═══════════════════════════════════════════════════════════
@@ -330,6 +396,10 @@ namespace EnvDataCollector.Services
                         }
                     }
                 }
+                if ("洗车机".Equals(rec.DeviceType) && (string.IsNullOrEmpty(rec.VehicleNo) || string.IsNullOrEmpty(rec.VehiclePicLocal) || string.IsNullOrEmpty(rec.VehicleNoPicLocal)))
+                {
+                    rec.CloseReason = "车牌识别异常";
+                }
             }
             catch (Exception ex) { Log.Warn(ex, "FindBestMatch 异常"); }
 
@@ -348,13 +418,16 @@ namespace EnvDataCollector.Services
                 // 沟通之后是否跳过
                 // 如果为事件上传，且关联表为 run_record，为数据中断，则跳过。
                 // 这种为接收到启动后 长时间为关闭或程序关闭很久后程序重启 “推送到推送队列”的 事件
-                //if (!"正常停止".Equals(reason)) {
-                //    return true;
-                //}
+                if (!"正常停止".Equals(reason)) {
+                    return true;
+                }
+                if ("洗车机".Equals(rec.DeviceType) && (string.IsNullOrEmpty(rec.VehicleNo) || string.IsNullOrEmpty(rec.VehiclePicLocal) || string.IsNullOrEmpty(rec.VehicleNoPicLocal))) {
+                    return true;
+                }
                 string eventUrl = _settings.Get(SK.EventApiUrl);
                 if (!string.IsNullOrWhiteSpace(eventUrl))
                 {
-                    int maxRetry = _settings.Get<int>(SK.MaxRetryCount, 10);
+                    int maxRetry = _settings.Get<int>(SK.MaxRetryCount, 3);
                     rec.Id = newId;
                     DateTime to = DateTime.Now;
                     string mode = _settings.Get(SK.EventStatMode, "Avg");

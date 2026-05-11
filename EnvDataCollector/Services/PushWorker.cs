@@ -150,7 +150,7 @@ namespace EnvDataCollector.Services
             }
 
             if (batch.Count > 0)
-                Log.Info("PushWorker：取出 {0} 条，成功 {1}", batch.Count, ok);
+                Log.Debug("PushWorker：取出 {0} 条，成功 {1}", batch.Count, ok);
             return ok;
         }
 

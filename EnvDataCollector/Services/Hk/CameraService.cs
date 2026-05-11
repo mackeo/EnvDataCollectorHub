@@ -296,19 +296,21 @@ namespace EnvDataCollector.Services.Hk
                 else if (vehicleLocal == null)             { vehicleLocal = relLocal; vehicleData = data; }
             }
 
-            if (_imageUploader != null)
-            {
-                if (vehicleData != null)
-                {
-                    string remote = _imageUploader.Upload(vehicleData, "vehicle.jpg");
-                    if (!string.IsNullOrEmpty(remote)) vehicleUrl = remote;
-                }
-                if (plateData != null)
-                {
-                    string remote = _imageUploader.Upload(plateData, "plate.jpg");
-                    if (!string.IsNullOrEmpty(remote)) plateUrl = remote;
-                }
-            }
+            // ★ 图片上传移至 RunRecordBuilder.CloseRecord 和 PushWorker 中补传
+            // 避免上传超时阻塞 Worker 线程导致队列积压
+            // if (_imageUploader != null)
+            // {
+            //     if (vehicleData != null)
+            //     {
+            //         string remote = _imageUploader.Upload(vehicleData, "vehicle.jpg");
+            //         if (!string.IsNullOrEmpty(remote)) vehicleUrl = remote;
+            //     }
+            //     if (plateData != null)
+            //     {
+            //         string remote = _imageUploader.Upload(plateData, "plate.jpg");
+            //         if (!string.IsNullOrEmpty(remote)) plateUrl = remote;
+            //     }
+            // }
 
             try
             {

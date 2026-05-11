@@ -212,6 +212,7 @@ CREATE INDEX IF NOT EXISTS idx_po_due           ON push_outbox(status, retry_cou
 CREATE INDEX IF NOT EXISTS idx_po_status_cre    ON push_outbox(status, created_at);
 -- DeleteSuccessOlderThan：status + updated_at
 CREATE INDEX IF NOT EXISTS idx_po_status_upd    ON push_outbox(status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_po_related_table_id    ON push_outbox(related_table, related_id);
 
 -- ── device ───────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_dev_enabled      ON device(enabled);

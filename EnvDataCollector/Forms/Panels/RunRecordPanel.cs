@@ -45,15 +45,17 @@ namespace EnvDataCollector.Forms.Panels
             _cmbStatus = UIHelper.MakeToolbarCombo(78, "全部", "Pending", "Failed", "Success");
             _lblResult = UIHelper.ResultLabel();
 
-            var btnQuery   = UIHelper.MakeBtn("🔍 查询",   UIHelper.C.Primary);
-            var btnScan    = UIHelper.MakeBtn("▶ 立即扫描", UIHelper.C.Dark);
-            var btnRematch = UIHelper.MakeBtn("🔄 重跑车牌匹配", UIHelper.C.Info);
-            var btnResend  = UIHelper.MakeBtn("⚡ 重发选中",  UIHelper.C.Success);
-            var btnAdmin   = UIHelper.MakeBtn("✅ 管理员标记成功", UIHelper.C.Purple);
+            var btnQuery    = UIHelper.MakeBtn("🔍 查询",       UIHelper.C.Primary);
+            var btnScan     = UIHelper.MakeBtn("▶ 立即扫描",    UIHelper.C.Dark);
+            var btnRematch  = UIHelper.MakeBtn("🔄 重跑车牌匹配", UIHelper.C.Info);
+            var btnEnqueue  = UIHelper.MakeBtn("📨 入队推送选中", UIHelper.C.Success);
+            var btnResend   = UIHelper.MakeBtn("⚡ 重发选中",     UIHelper.C.Warning);
+            var btnAdmin    = UIHelper.MakeBtn("✅ 管理员标记成功", UIHelper.C.Purple);
 
             btnQuery.Click   += (s, e) => RefreshData();
             btnScan.Click    += (s, e) => ScanNow();
             btnRematch.Click += (s, e) => RematchSelected();
+            btnEnqueue.Click += (s, e) => EnqueueSelected();
             btnResend.Click  += (s, e) => ResendSelected();
             btnAdmin.Click   += (s, e) => AdminMarkSuccess();
 
@@ -61,7 +63,7 @@ namespace EnvDataCollector.Forms.Panels
                 UIHelper.InlineLabel("从:"), _dtFrom,
                 UIHelper.InlineLabel("至:"), _dtTo,
                 _txtCode, _txtPlate, _cmbStatus,
-                btnQuery, btnScan, btnRematch, btnResend, btnAdmin, _lblResult);
+                btnQuery, btnScan, btnRematch, btnEnqueue, btnResend, btnAdmin, _lblResult);
 
             _grid = UIHelper.MakeGrid();
             _grid.Columns.AddRange(
@@ -170,6 +172,31 @@ namespace EnvDataCollector.Forms.Panels
                 ok > 0 ? UIHelper.C.Success : Color.OrangeRed);
         }
 
+        private void EnqueueSelected()
+        {
+            if (_grid.SelectedRows.Count == 0) { Tip("请先选中一行或多行"); return; }
+            if (_main?.RunBuilder == null)     { Tip("RunRecordBuilder 未初始化"); return; }
+            if (!Confirm($"确认将选中的 {_grid.SelectedRows.Count} 条记录入队推送？\n（push_outbox 中已有 Pending/Failed 任务的将跳过）")) return;
+
+            int enqueued = 0, skipped = 0, failed = 0;
+            foreach (DataGridViewRow row in _grid.SelectedRows)
+            {
+                if (!long.TryParse(row.Cells["Id"].Value?.ToString(), out long id)) continue;
+                try
+                {
+                    bool? result = _main.RunBuilder.ReEnqueue(id);
+                    if (result == true) enqueued++;
+                    else if (result == false) skipped++;
+                    else failed++;
+                }
+                catch (Exception ex) { Log.Warn(ex, "ReEnqueue id={0} 失败", id); failed++; }
+            }
+            RefreshData();
+            string msg = $"📨 入队 {enqueued} 条，跳过(已存在) {skipped} 条";
+            if (failed > 0) msg += $"，异常 {failed} 条";
+            SetResult(_lblResult, msg, enqueued > 0 ? UIHelper.C.Success : Color.OrangeRed);
+        }
+
         private void ResendSelected()
         {
             if (_grid.SelectedRows.Count == 0) { Tip("请先选中一行或多行"); return; }
@@ -276,9 +303,9 @@ namespace EnvDataCollector.Forms.Panels
             Row("开始时间",      r.StartTime);
             Row("结束时间",      r.EndTime);
             Row("时长(秒)",      r.RunTimeSec.ToString());
-            Row("电流 末/最大/最小/中位", $"{Fmt(r.Currents)} / {Fmt(r.CurrentsMax)} / {Fmt(r.CurrentsMin)} / {Fmt(r.CurrentsMedian)}");
-            Row("水压 末/最大/最小/中位", $"{Fmt(r.WaterPressure)} / {Fmt(r.WaterPressureMax)} / {Fmt(r.WaterPressureMin)} / {Fmt(r.WaterPressureMedian)}");
-            Row("流量 末/最大/最小/中位", $"{Fmt(r.FlowQuantity)} / {Fmt(r.FlowQuantityMax)} / {Fmt(r.FlowQuantityMin)} / {Fmt(r.FlowQuantityMedian)}");
+            Row("电流 末/最大/最小/平均/中位", $"{Fmt(r.Currents)} / {Fmt(r.CurrentsMax)} / {Fmt(r.CurrentsMin)} / {Fmt(r.CurrentsAvg)} / {Fmt(r.CurrentsMedian)}");
+            Row("水压 末/最大/最小/平均/中位", $"{Fmt(r.WaterPressure)} / {Fmt(r.WaterPressureMax)} / {Fmt(r.WaterPressureMin)} / {Fmt(r.WaterPressureAvg)} / {Fmt(r.WaterPressureMedian)}");
+            Row("流量 末/最大/最小/平均/中位", $"{Fmt(r.FlowQuantity)} / {Fmt(r.FlowQuantityMax)} / {Fmt(r.FlowQuantityMin)}  / {Fmt(r.FlowQuantityAvg)} / {Fmt(r.FlowQuantityMedian)}");
             Row("车牌号",        r.VehicleNo);
             Row("车辆图(本地)",  r.VehiclePicLocal);
             Row("车牌图(本地)",  r.VehicleNoPicLocal);
