@@ -70,27 +70,25 @@ namespace EnvDataCollector.Services
 
             int interval = _settings.Get<int>(SK.StatusUploadIntervalSec, 60);
             string mode  = _settings.Get(SK.EventStatMode, "Avg");
-            int maxRetry = _settings.Get<int>(SK.MaxRetryCount, 10);
+            int maxRetry = _settings.Get<int>(SK.MaxRetryCount, 3);
 
-            var devs = _devRepo.GetAll(true)
-                .Where(d => d.DeviceType == "洗车机" || d.DeviceType == "雾炮" || d.DeviceType == "干雾")
-                .ToList();
+            var devs = _devRepo.GetAll(true).ToList();
             if (devs.Count == 0) return 0;
 
             DateTime to = DateTime.Now;
             DateTime from = to.AddSeconds(-interval);
-            int enqueued = 0;
+            var items = new List<object>();
 
             foreach (var d in devs)
             {
-                double? currVal, pressVal, flowVal;
+                double? currVal = null, pressVal = null, flowVal = null;
                 try
                 {
                     currVal  = _trendRepo.GetStat(d.Id, nameof(VarRole.Currents),      from, to, mode);
                     pressVal = _trendRepo.GetStat(d.Id, nameof(VarRole.WaterPressure), from, to, "Max");
                     flowVal  = _trendRepo.GetStat(d.Id, nameof(VarRole.FlowQuantity),  from, to, mode);
                 }
-                catch (Exception ex) { Log.Warn(ex, "GetStat 失败 dev={0}", d.Id); continue; }
+                catch (Exception ex) { Log.Warn(ex, "GetStat 失败 dev={0}", d.Id); }
 
                 currVal = currVal.HasValue ? Math.Round(currVal.Value, 3) : currVal;
                 pressVal = pressVal.HasValue ? Math.Round(pressVal.Value, 3) : pressVal;
@@ -101,34 +99,32 @@ namespace EnvDataCollector.Services
                 if (lastStartup != null && int.TryParse(lastStartup.ValueStr, out int sv))
                     startup = sv;
 
-                if (currVal == null && pressVal == null && flowVal == null && startup == null) continue;
-
                 int online = DetermineOnline(d);
 
-                var payload = new
+                items.Add(new
                 {
                     DeviceCode    = d.DeviceCode,
                     DeviceType    = d.DeviceType,
                     Time          = to.ToString("yyyy-MM-dd HH:mm:ss"),
                     Online        = online,
-                    Startup = startup,
-                    Currents    = currVal,
+                    Startup       = startup,
+                    Currents      = currVal,
                     WaterPressure = pressVal,
                     FlowQuantity  = flowVal
-                };
-                string json = JsonConvert.SerializeObject(payload);
-
-                try
-                {
-                    _outbox.Enqueue("status", url, json, "variable_trend", null, maxRetry);
-                    enqueued++;
-                }
-                catch (Exception ex) { Log.Warn(ex, "Enqueue status 失败 dev={0}", d.Id); }
+                });
             }
 
-            if (enqueued > 0)
-                Log.Info("StatusUploadWorker：入队 {0} 条状态消息", enqueued);
-            return enqueued;
+            if (items.Count == 0) return 0;
+
+            string json = JsonConvert.SerializeObject(items);
+
+            try
+            {
+                _outbox.Enqueue("status", url, json, "variable_trend", null, maxRetry);
+                Log.Info("StatusUploadWorker：入队 1 条状态消息，包含 {0} 个设备", items.Count);
+                return 1;
+            }
+            catch (Exception ex) { Log.Warn(ex, "Enqueue status 失败"); return 0; }
         }
 
         private int DetermineOnline(DeviceEntity d)

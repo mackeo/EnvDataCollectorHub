@@ -145,23 +145,35 @@ namespace EnvDataCollector.Services
             pressVal = pressVal.HasValue ? Math.Round(pressVal.Value, 3) : pressVal;
             flowVal = flowVal.HasValue ? Math.Round(flowVal.Value, 3) : flowVal;
 
-            var payload = new
-            {
-                Time = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-                DeviceType = rec.DeviceType,
-                DeviceCode = rec.DeviceCode,
-                Currents = currVal,
-                WaterPressure = pressVal,
-                FlowQuantity = flowVal,
-                StartTime = rec.StartTime,
-                EndTime = rec.EndTime,
-                RunTime = rec.RunTimeSec,
-                VehicleNo = RemoveColorPrefix(rec.VehicleNo),
-                VehiclePic = rec.VehiclePic,
-                VehicleNoPic = rec.VehicleNoPic,
-            };
-
-            string json = Newtonsoft.Json.JsonConvert.SerializeObject(payload);
+            var payloadList = new List<object>
+                    {
+                        new
+                    {
+                        /*rec.Id, rec.DeviceId, rec.DeviceType, rec.DeviceCode,
+                        rec.StartTime, rec.EndTime, rec.RunTimeSec,
+                        Currents      = PickStat(rec, mode, nameof(VarRole.Currents)),
+                        WaterPressure = PickStat(rec, mode, nameof(VarRole.WaterPressure)),
+                        FlowQuantity  = PickStat(rec, mode, nameof(VarRole.FlowQuantity)),
+                        rec.CurrentsMax, rec.CurrentsMin, rec.CurrentsAvg, rec.CurrentsMedian,
+                        rec.WaterPressureMax, rec.WaterPressureMin, rec.WaterPressureAvg, rec.WaterPressureMedian,
+                        rec.FlowQuantityMax, rec.FlowQuantityMin, rec.FlowQuantityAvg, rec.FlowQuantityMedian,
+                        rec.VehicleNo, rec.VehiclePic, rec.VehicleNoPic,
+                        rec.CloseReason*/
+                        Time = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                        DeviceType = rec.DeviceType,
+                        DeviceCode = rec.DeviceCode,
+                        Currents = currVal,
+                        WaterPressure = pressVal,
+                        FlowQuantity = flowVal,
+                        StartTime = rec.StartTime,
+                        EndTime = rec.EndTime,
+                        RunTime = rec.RunTimeSec,
+                        VehicleNo = RemoveColorPrefix(rec.VehicleNo),
+                        VehiclePic = rec.VehiclePic,
+                        VehicleNoPic = rec.VehicleNoPic,
+                    }
+                    };
+            string json = Newtonsoft.Json.JsonConvert.SerializeObject(payloadList);
             _outboxRepo.Enqueue("event", eventUrl, json, "run_record", runRecordId, maxRetry);
 
             using (IDbConnection db = DbHelper.Open())
@@ -446,7 +458,10 @@ namespace EnvDataCollector.Services
                     pressVal = pressVal.HasValue ? Math.Round(pressVal.Value, 3) : pressVal;
                     flowVal = flowVal.HasValue ? Math.Round(flowVal.Value, 3) : flowVal;
 
-                    var payload = new
+
+                    var payloadList = new List<object>
+                    {
+                        new
                     {
                         /*rec.Id, rec.DeviceId, rec.DeviceType, rec.DeviceCode,
                         rec.StartTime, rec.EndTime, rec.RunTimeSec,
@@ -470,9 +485,9 @@ namespace EnvDataCollector.Services
                         VehicleNo = RemoveColorPrefix(rec.VehicleNo),
                         VehiclePic = rec.VehiclePic,
                         VehicleNoPic = rec.VehicleNoPic,
+                    }
                     };
-
-                    string json = Newtonsoft.Json.JsonConvert.SerializeObject(payload);
+                    string json = Newtonsoft.Json.JsonConvert.SerializeObject(payloadList);
                     _outboxRepo.Enqueue("event", eventUrl, json, "run_record", newId, maxRetry);
                 }
             }

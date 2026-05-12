@@ -53,7 +53,7 @@ namespace EnvDataCollector.Services
                     return null;
                 }
 
-                string remoteUrl = ParseUrlFromResponse(respText);
+                string remoteUrl = respText;// ParseUrlFromResponse(respText);
                 if (!string.IsNullOrEmpty(remoteUrl))
                     Log.Debug("图片上传成功：{0}", remoteUrl);
                 else

@@ -189,9 +189,12 @@ namespace EnvDataCollector.Services
                 // 刷新 payload：把原 payload 解析、覆盖 vehiclePic/vehicleNoPic 字段、再序列化
                 try
                 {
-                    var obj = JObject.Parse(originalPayload);
-                    obj["VehiclePic"]   = rec.VehiclePic;
-                    obj["VehicleNoPic"] = rec.VehicleNoPic;
+                    var obj = JArray.Parse(originalPayload);
+                    if (obj.Count > 0)
+                    {
+                        obj[0]["VehiclePic"] = rec.VehiclePic;
+                        obj[0]["VehicleNoPic"] = rec.VehicleNoPic;
+                    }
                     return obj.ToString(Formatting.None);
                 }
                 catch
