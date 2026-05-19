@@ -70,7 +70,7 @@ namespace EnvDataCollector.Services
 
             int interval = _settings.Get<int>(SK.StatusUploadIntervalSec, 60);
             string mode  = _settings.Get(SK.EventStatMode, "Avg");
-            int maxRetry = _settings.Get<int>(SK.MaxRetryCount, 3);
+            int maxRetry = _settings.Get<int>(SK.MaxRetryCount, 5);
 
             var devs = _devRepo.GetAll(true).ToList();
             if (devs.Count == 0) return 0;
@@ -96,8 +96,7 @@ namespace EnvDataCollector.Services
 
                 int? startup = null;
                 var lastStartup = _trendRepo.GetLatest(d.Id, nameof(VarRole.Startup));
-                if (lastStartup != null && int.TryParse(lastStartup.ValueStr, out int sv))
-                    startup = sv;
+                startup = ParseStartup(lastStartup.ValueStr);
 
                 int online = DetermineOnline(d);
 
@@ -150,6 +149,21 @@ namespace EnvDataCollector.Services
             }
 
             return 1;
+        }
+
+        /// <summary>把 trend.value_str（"0"/"1"/"true"/"false"）解析成 0/1。</summary>
+        private static int ParseStartup(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return 0;
+            s = s.Trim();
+            if (s == "1" || s.Equals("true", StringComparison.OrdinalIgnoreCase))
+                return 1;
+            if (s == "0" || s.Equals("false", StringComparison.OrdinalIgnoreCase))
+                return 0;
+            if (double.TryParse(s, out double d))
+                return d != 0 ? 1 : 0;
+
+            return 0;
         }
     }
 }

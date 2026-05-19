@@ -22,7 +22,15 @@ namespace EnvDataCollector.Forms
             this.StartPosition = FormStartPosition.CenterScreen;
             this.Font = new Font("Microsoft YaHei UI", 9f);
             this.BackColor = Color.FromArgb(245, 247, 250);
-
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
+            this.SuspendLayout();
+            // 
+            // MainForm
+            // 
+            this.ClientSize = new System.Drawing.Size(284, 261);
+            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.Name = "MainForm";
+            this.ResumeLayout(false);
             // ── 状态栏
             _status = new StatusStrip { BackColor = Color.FromArgb(44, 62, 80), SizingGrip = false };
             Color slc = Color.FromArgb(189, 195, 199);

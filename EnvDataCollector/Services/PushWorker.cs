@@ -118,8 +118,9 @@ namespace EnvDataCollector.Services
                     {
                         if (!_token.ApplyBearer(req))
                         {
-                            // token 拿不到：保留 retry_count 不递增，短延后重试避免 spam
-                            _repo.MarkFailed(msg.Id, null, "Token 不可用：" + (_token.LastError ?? ""),
+                            string tokenErr = "Token 不可用：" + (_token.LastError ?? "");
+                            Log.Warn("PushWorker id={0} 推送失败：{1}", msg.Id, tokenErr);
+                            _repo.MarkFailed(msg.Id, null, tokenErr,
                                 msg.RetryCount, DateTime.Now.AddSeconds(baseSec));
                             continue;
                         }
@@ -136,15 +137,43 @@ namespace EnvDataCollector.Services
                     }
                     else
                     {
+                        string httpErr = $"HTTP {code}：{Truncate(respText, 500)}";
+                        Log.Warn("PushWorker id={0} 推送失败：{1} → {2}", msg.Id, httpErr, msg.TargetUrl);
                         var nrt = NextRetry(backoff, baseSec, msg.RetryCount);
-                        _repo.MarkFailed(msg.Id, code, Truncate(respText, 500),
+                        _repo.MarkFailed(msg.Id, code, httpErr,
                             msg.RetryCount + 1, nrt);
                     }
                 }
+                catch (TaskCanceledException ex) when (ex.CancellationToken == CancellationToken.None)
+                {
+                    string timeoutErr = $"HTTP 请求超时（{timeoutSec}s）→ {msg.TargetUrl}";
+                    Log.Warn("PushWorker id={0} 推送失败：{1}", msg.Id, timeoutErr);
+                    var nrt = NextRetry(backoff, baseSec, msg.RetryCount);
+                    _repo.MarkFailed(msg.Id, null, timeoutErr,
+                        msg.RetryCount + 1, nrt);
+                }
+                catch (HttpRequestException ex)
+                {
+                    string connErr = $"HTTP 连接失败：{ex.Message} → {msg.TargetUrl}";
+                    Log.Warn("PushWorker id={0} 推送失败：{1}", msg.Id, connErr);
+                    var nrt = NextRetry(backoff, baseSec, msg.RetryCount);
+                    _repo.MarkFailed(msg.Id, null, connErr,
+                        msg.RetryCount + 1, nrt);
+                }
+                catch (OperationCanceledException ex)
+                {
+                    string cancelErr = $"请求被取消：{ex.Message} → {msg.TargetUrl}";
+                    Log.Warn("PushWorker id={0} 推送失败：{1}", msg.Id, cancelErr);
+                    var nrt = NextRetry(backoff, baseSec, msg.RetryCount);
+                    _repo.MarkFailed(msg.Id, null, cancelErr,
+                        msg.RetryCount + 1, nrt);
+                }
                 catch (Exception ex)
                 {
+                    string otherErr = $"推送异常：{ex.GetType().Name}：{ex.Message} → {msg.TargetUrl}";
+                    Log.Warn("PushWorker id={0} 推送失败：{1}", msg.Id, otherErr);
                     var nrt = NextRetry(backoff, baseSec, msg.RetryCount);
-                    _repo.MarkFailed(msg.Id, null, Truncate(ex.Message, 500),
+                    _repo.MarkFailed(msg.Id, null, Truncate(otherErr, 500),
                         msg.RetryCount + 1, nrt);
                 }
             }

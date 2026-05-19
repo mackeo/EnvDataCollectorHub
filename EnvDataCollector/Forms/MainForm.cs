@@ -26,6 +26,7 @@ namespace EnvDataCollector.Forms
         public readonly PushWorker         Pusher         = new();
         public readonly StatusUploadWorker StatusUploader = new();
         public readonly CleanupWorker      Cleanup        = new();
+        public readonly PlateRematchWorker PlateRematch   = new();
         public readonly ModbusServer       Modbus         = new();
 
         private readonly OutboxRepository _outboxRepo = new();
@@ -53,6 +54,7 @@ namespace EnvDataCollector.Forms
             Pusher.Start(TokenSvc, ImageUploader);
             StatusUploader.Start(Opc, TrendWriter, Cam);
             Cleanup.Start();
+            PlateRematch.Start(RunBuilder);
             Modbus.Start(this);
 
             InitPanels();
@@ -139,6 +141,7 @@ namespace EnvDataCollector.Forms
             _statusTimer.Stop();
             try { Modbus?.Stop();         } catch { }
             try { Cleanup?.Stop();        } catch { }
+            try { PlateRematch?.Stop();   } catch { }
             try { StatusUploader?.Stop(); } catch { }
             try { Pusher?.Stop();         } catch { }
             try { RunBuilder?.Stop();     } catch { }

@@ -77,12 +77,13 @@ namespace EnvDataCollector.Services
             return SafeScan();
         }
 
-        /// <summary>对已存在的 RunRecord 重新跑车牌匹配（用其 StartTime 作为 baseTime）。</summary>
+        /// <summary>对已存在的 RunRecord 重新跑车牌匹配（用其 EndTime 作为 baseTime）。
+        /// 匹配成功后更新车牌信息、关闭原因为"正常停止"，并触发入队推送。</summary>
         public bool RematchPlate(long runRecordId)
         {
             var rec = _runRepo.GetById(runRecordId);
             if (rec == null) return false;
-            if (!DateTime.TryParse(rec.StartTime, out var baseTime)) return false;
+            if (!DateTime.TryParse(rec.EndTime, out var baseTime)) return false;
 
             int pre = 30, post = 120;
             var cam = _camRepo.GetByDevice(rec.DeviceId);
@@ -91,20 +92,66 @@ namespace EnvDataCollector.Services
             var plate = _plateRepo.FindBestMatch(rec.DeviceId, baseTime, pre, post);
             if (plate == null) return false;
 
-            // 直接 SQL 更新（仓储无现成方法）
+            string vehiclePic = plate.VehiclePicUrl;
+            string vehicleNoPic = plate.PlatePicUrl;
+
+            if (_imageUploader != null)
+            {
+                if (string.IsNullOrEmpty(vehiclePic) && !string.IsNullOrEmpty(plate.VehiclePicLocal))
+                {
+                    string remote = _imageUploader.UploadFromLocal(plate.VehiclePicLocal);
+                    if (!string.IsNullOrEmpty(remote))
+                    {
+                        vehiclePic = remote;
+                        try { _plateRepo.UpdateRemoteUrls(plate.Id, remote, plate.PlatePicUrl); }
+                        catch (Exception ex) { Log.Error(ex, "RematchPlate 回填 plate_event vehicle URL 失败"); }
+                    }
+                }
+                if (string.IsNullOrEmpty(vehicleNoPic) && !string.IsNullOrEmpty(plate.PlatePicLocal))
+                {
+                    string remote = _imageUploader.UploadFromLocal(plate.PlatePicLocal);
+                    if (!string.IsNullOrEmpty(remote))
+                    {
+                        vehicleNoPic = remote;
+                        try { _plateRepo.UpdateRemoteUrls(plate.Id, vehiclePic, remote); }
+                        catch (Exception ex) { Log.Error(ex, "RematchPlate 回填 plate_event plate URL 失败"); }
+                    }
+                }
+            }
+
             using IDbConnection db = DbHelper.Open();
             db.Execute(@"
                 UPDATE run_record
                 SET vehicle_no=@v,
                     vehicle_pic_local=@vp, vehicle_no_pic_local=@np,
-                    vehicle_pic=@vu, vehicle_no_pic=@nu
+                    vehicle_pic=@vu, vehicle_no_pic=@nu,
+                    close_reason='正常停止'
                 WHERE id=@id",
                 new {
                     id = runRecordId,
                     v  = plate.PlateNo,
                     vp = plate.VehiclePicLocal, np = plate.PlatePicLocal,
-                    vu = plate.VehiclePicUrl,   nu = plate.PlatePicUrl
+                    vu = vehiclePic, nu = vehicleNoPic
                 });
+
+            Log.Info("RematchPlate 成功：run_record #{0} 车牌 {1}，关闭原因更新为正常停止",
+                runRecordId, plate.PlateNo);
+
+            try
+            {
+                var result = ReEnqueue(runRecordId);
+                if (result == true)
+                    Log.Debug("RematchPlate 入队成功：run_record #{0}", runRecordId);
+                else if (result == false)
+                    Log.Debug("RematchPlate 入队跳过（已存在）：run_record #{0}", runRecordId);
+                else
+                    Log.Warn("RematchPlate 入队条件不满足：run_record #{0}", runRecordId);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn(ex, "RematchPlate 入队失败：run_record #{0}", runRecordId);
+            }
+
             return true;
         }
 
@@ -297,8 +344,19 @@ namespace EnvDataCollector.Services
         {
             if (string.IsNullOrEmpty(s)) return 0;
             s = s.Trim();
-            if (s == "1" || s.Equals("true", StringComparison.OrdinalIgnoreCase)) return 1;
-            if (double.TryParse(s, out double d)) return d != 0 ? 1 : 0;
+
+            // 匹配 1 或 True（不区分大小写）
+            if (s == "1" || s.Equals("true", StringComparison.OrdinalIgnoreCase))
+                return 1;
+
+            // 匹配 0 或 False（不区分大小写）
+            if (s == "0" || s.Equals("false", StringComparison.OrdinalIgnoreCase))
+                return 0;
+
+            // 数值尝试：非零为 true，零为 false
+            if (double.TryParse(s, out double d))
+                return d != 0 ? 1 : 0;
+
             return 0;
         }
 
@@ -393,7 +451,7 @@ namespace EnvDataCollector.Services
                             {
                                 rec.VehiclePic = remote;
                                 try { _plateRepo.UpdateRemoteUrls(plate.Id, remote, plate.PlatePicUrl); }
-                                catch (Exception ex) { Log.Debug(ex, "回填 plate_event vehicle URL 失败"); }
+                                catch (Exception ex) { Log.Error(ex, "回填 plate_event vehicle URL 失败"); }
                             }
                         }
                         if (string.IsNullOrEmpty(rec.VehicleNoPic) && !string.IsNullOrEmpty(plate.PlatePicLocal))
@@ -403,7 +461,7 @@ namespace EnvDataCollector.Services
                             {
                                 rec.VehicleNoPic = remote;
                                 try { _plateRepo.UpdateRemoteUrls(plate.Id, rec.VehiclePic, remote); }
-                                catch (Exception ex) { Log.Debug(ex, "回填 plate_event plate URL 失败"); }
+                                catch (Exception ex) { Log.Error(ex, "回填 plate_event plate URL 失败"); }
                             }
                         }
                     }

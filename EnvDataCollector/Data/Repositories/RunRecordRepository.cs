@@ -90,6 +90,14 @@ namespace EnvDataCollector.Data.Repositories
                 new { id, note = "[管理员] " + note });
         }
 
+        public IEnumerable<RunRecordEntity> QueryByCloseReason(string closeReason, int limit = 100)
+        {
+            using IDbConnection db = DbHelper.Open();
+            return db.Query<RunRecordEntity>(
+                "SELECT * FROM run_record WHERE close_reason=@closeReason ORDER BY start_time DESC LIMIT @limit",
+                new { closeReason, limit });
+        }
+
         public void DeleteSuccessOlderThan(DateTime cutoff)
         {
             using IDbConnection db = DbHelper.Open();

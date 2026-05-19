@@ -155,7 +155,7 @@ namespace EnvDataCollector.Services
                         Log.Error(ex, "TrendWriter 批量写入失败，丢弃本批 {0} 条", batch.Count);
                     }
                 }
-                if (total > 0) Log.Debug("TrendWriter flush {0} 条", total);
+                //if (total > 0) Log.Debug("TrendWriter flush {0} 条", total);
                 return total;
             }
             finally { _flushing = false; }
